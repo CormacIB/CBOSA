@@ -1,0 +1,11 @@
+﻿PyQt6>=6.7
+toml
+mistune>=3.0
+python-frontmatter
+httpx
+beautifulsoup4
+yt-dlp
+pypdf
+networkx
+pyqtgraph
+pytest

@@ -1,0 +1,16 @@
+﻿# CBOSA Light Theme
+
+[colors]
+background = "#f8f8f2"
+surface    = "#eeeeee"
+primary    = "#6272a4"
+accent     = "#ff79c6"
+text       = "#282a36"
+text_muted = "#666666"
+border     = "#cccccc"
+
+[fonts]
+family       = "JetBrains Mono"
+size_base    = 13
+size_small   = 11
+size_heading = 16
