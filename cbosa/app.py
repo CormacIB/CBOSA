@@ -3,7 +3,6 @@ CBOSA application bootstrap.
 Creates the QApplication, loads the theme, and launches the main window.
 """
 import sys
-from pathlib import Path
 from PyQt6.QtWidgets import QApplication
 
 from cbosa import config
@@ -22,7 +21,7 @@ def _register_panels(registry=None) -> None:
     if registry is None:
         registry = default_registry
 
-    data_dir = Path(config.get("data_dir", "data")) / "notes"
+    data_dir = config.resolve("data_dir", "data") / "notes"
     store = NoteStore(data_dir)
     tag_index = TagIndex(store)
     tag_index.rebuild()
@@ -56,7 +55,7 @@ def create_app(argv=None) -> QApplication:
 
 
 def _apply_theme(app: QApplication) -> None:
-    theme_path = config.get("theme", "themes/dark_default.toml")
+    theme_path = config.resolve("theme", "themes/dark_default.toml")
     engine = ThemeEngine()
     try:
         engine.apply(app, theme_path)
