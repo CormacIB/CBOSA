@@ -69,7 +69,7 @@ data/
 | 6 | Wikilink Rename Propagation | Done |
 | 7 | Graph View Panel | Done |
 | 8 | Finance Ledger + Panel | Done |
-| 9 | Email IMAP + Task Extraction + Panel | Not started |
+| 9 | Email IMAP + Task Extraction + Panel | Done |
 | 10 | Canvas LMS Sync + Panel | Not started |
 | 11 | Capture Engine + Panel | Not started |
 | 12 | AI Service Interface + NullAIService Wiring | Not started |

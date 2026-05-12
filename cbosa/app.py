@@ -14,7 +14,9 @@ from cbosa.core.search_index import SearchIndex
 from cbosa.core.tag_index import TagIndex
 from cbosa.ui.theme_engine import ThemeEngine, ThemeLoadError
 from cbosa.ui.main_window import MainWindow
+from cbosa.modules.email_store import EmailStore
 from cbosa.ui.panels import default_registry, BasePanel
+from cbosa.ui.panels.email_panel import EmailPanel
 from cbosa.ui.panels.finance_panel import FinancePanel
 from cbosa.ui.panels.graph_view import GraphViewPanel
 from cbosa.ui.panels.note_browser import NoteBrowserPanel
@@ -61,7 +63,12 @@ def _register_panels(registry=None) -> None:
         "Finance",
         lambda title, parent: FinancePanel(ledger, title, parent),
     )
-    registry.register("Email", BasePanel)
+    email_db_path = base_data_dir / "email.db"
+    email_store = EmailStore(email_db_path)
+    registry.register(
+        "Email",
+        lambda title, parent: EmailPanel(email_store, title, parent),
+    )
     registry.register("Canvas", BasePanel)
 
 
