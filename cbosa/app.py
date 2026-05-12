@@ -78,6 +78,7 @@ def create_app(argv=None) -> QApplication:
 
 def _apply_theme(app: QApplication) -> None:
     theme_path = config.resolve("theme", "themes/dark_default.toml")
+    theme_path = config.resolve("theme", "themes/dark_default.toml")
     engine = ThemeEngine()
     try:
         engine.apply(app, theme_path)
