@@ -31,6 +31,10 @@ class NoteNotFoundError(FileNotFoundError):
     """Raised when a requested note does not exist."""
 
 
+class DuplicateNoteError(FileExistsError):
+    """Raised when a rename target already exists."""
+
+
 class NoteStore:
     def __init__(self, root: Path) -> None:
         self._root = Path(root)
@@ -67,6 +71,16 @@ class NoteStore:
         if not path.exists():
             raise NoteNotFoundError(f"Note not found: {name}")
         path.unlink()
+
+    def rename(self, old_name: str, new_name: str) -> Note:
+        old_path = self._path(old_name)
+        new_path = self._path(new_name)
+        if not old_path.exists():
+            raise NoteNotFoundError(f"Note not found: {old_name}")
+        if new_path.exists():
+            raise DuplicateNoteError(f"Note already exists: {new_name}")
+        old_path.rename(new_path)
+        return self.read(new_name)
 
     def all_names(self) -> list[str]:
         return [p.stem for p in self._root.glob("*.md")]

@@ -93,6 +93,16 @@ class MainWindow(QMainWindow):
             editor = self._panel_instances.get("Note Editor")
             if editor is not None:
                 panel.note_deleted.connect(editor.clear_if_current)
+        if name == "Note Editor":
+            panel.note_link_activated.connect(self._on_note_selected)
+            graph = self._panel_instances.get("Graph View")
+            if graph is not None:
+                panel.note_saved.connect(lambda _: graph.refresh())
+        if name == "Graph View":
+            panel.node_clicked.connect(self._on_note_selected)
+            editor = self._panel_instances.get("Note Editor")
+            if editor is not None:
+                editor.note_saved.connect(lambda _: panel.refresh())
 
     def _on_note_selected(self, note_name: str) -> None:
         if "Note Editor" not in self._panel_instances:
@@ -100,6 +110,9 @@ class MainWindow(QMainWindow):
         editor = self._panel_instances.get("Note Editor")
         if editor is not None:
             editor.open_note(note_name)
+        browser = self._panel_instances.get("Note Browser")
+        if browser is not None:
+            browser.select_note(note_name)
 
     def _save_layout(self) -> None:
         self._layout_path.parent.mkdir(parents=True, exist_ok=True)

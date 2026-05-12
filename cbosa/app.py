@@ -3,10 +3,11 @@ CBOSA application bootstrap.
 Creates the QApplication, loads the theme, and launches the main window.
 """
 import sys
-from pathlib import Path
 from PyQt6.QtWidgets import QApplication
 
 from cbosa import config
+from cbosa.core.daily_note import DailyNoteService
+from cbosa.core.ledger import Ledger
 from cbosa.core.link_index import LinkIndex
 from cbosa.core.note_store import NoteStore
 from cbosa.core.search_index import SearchIndex
@@ -14,6 +15,8 @@ from cbosa.core.tag_index import TagIndex
 from cbosa.ui.theme_engine import ThemeEngine, ThemeLoadError
 from cbosa.ui.main_window import MainWindow
 from cbosa.ui.panels import default_registry, BasePanel
+from cbosa.ui.panels.finance_panel import FinancePanel
+from cbosa.ui.panels.graph_view import GraphViewPanel
 from cbosa.ui.panels.note_browser import NoteBrowserPanel
 from cbosa.ui.panels.note_editor import NoteEditorPanel
 
@@ -22,8 +25,12 @@ def _register_panels(registry=None) -> None:
     if registry is None:
         registry = default_registry
 
-    data_dir = Path(config.get("data_dir", "data")) / "notes"
-    store = NoteStore(data_dir)
+    base_data_dir = config.resolve("data_dir", "data")
+    store = NoteStore(base_data_dir / "notes")
+    daily_store = NoteStore(base_data_dir / "daily")
+
+    DailyNoteService(daily_store).ensure_today()
+
     tag_index = TagIndex(store)
     tag_index.rebuild()
     link_index = LinkIndex(store)
@@ -33,13 +40,27 @@ def _register_panels(registry=None) -> None:
 
     registry.register(
         "Note Browser",
-        lambda title, parent: NoteBrowserPanel(store, tag_index, search_index, title, parent),
+        lambda title, parent: NoteBrowserPanel(
+            store, tag_index, search_index, title, parent,
+            daily_store=daily_store, link_index=link_index,
+        ),
     )
     registry.register(
         "Note Editor",
-        lambda title, parent: NoteEditorPanel(store, link_index, title, parent),
+        lambda title, parent: NoteEditorPanel(
+            store, link_index, title, parent, daily_store=daily_store
+        ),
     )
-    registry.register("Finance", BasePanel)
+    registry.register(
+        "Graph View",
+        lambda title, parent: GraphViewPanel(store, link_index, title, parent),
+    )
+    ledger_path = base_data_dir / "finance.db"
+    ledger = Ledger(ledger_path)
+    registry.register(
+        "Finance",
+        lambda title, parent: FinancePanel(ledger, title, parent),
+    )
     registry.register("Email", BasePanel)
     registry.register("Canvas", BasePanel)
 
@@ -56,7 +77,7 @@ def create_app(argv=None) -> QApplication:
 
 
 def _apply_theme(app: QApplication) -> None:
-    theme_path = config.get("theme", "themes/dark_default.toml")
+    theme_path = config.resolve("theme", "themes/dark_default.toml")
     engine = ThemeEngine()
     try:
         engine.apply(app, theme_path)

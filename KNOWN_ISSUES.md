@@ -42,8 +42,6 @@ Ctrl+P lists Notes, Finance, Email, and Canvas, but all open an empty `BasePanel
 ## KI-4: Theme and config paths are relative to the working directory
 
 **Area:** Issue #1 — `cbosa/config.py`, `cbosa/app.py`
-**Status:** Open / low priority
+**Status:** Fixed
 
-`cbosa.toml` is looked up relative to wherever `python main.py` is invoked. The default theme path `themes/dark_default.toml` is also relative. Running from outside the project root silently falls back to no theme (a warning is printed; no crash).
-
-**Planned fix:** Anchor paths to the project root via `Path(__file__).parent` rather than the current working directory.
+`config.py` now defines `PROJECT_ROOT = Path(__file__).parent.parent` and defaults the config file lookup to `PROJECT_ROOT / "cbosa.toml"`. A new `config.resolve()` helper returns any config path as an absolute `Path` anchored to `PROJECT_ROOT`. `app.py` uses `config.resolve()` for both `theme` and `data_dir`.

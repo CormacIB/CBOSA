@@ -37,3 +37,23 @@ class LinkIndex:
 
     def links_to(self, name: str) -> list[str]:
         return list(self._backward.get(name, []))
+
+    def rename_note(self, old_name: str, new_name: str) -> list[str]:
+        """Rewrite [[old_name]] → [[new_name]] in all referencing notes.
+
+        Returns the list of note names that were modified.
+        """
+        referencing = self.links_to(old_name)
+        modified = []
+        for note_name in referencing:
+            note = self._store.read(note_name)
+            new_content = _WIKILINK_RE.sub(
+                lambda m, old=old_name, new=new_name: (
+                    f"[[{new}]]" if m.group(1) == old else m.group(0)
+                ),
+                note.content,
+            )
+            self._store.update(note_name, new_content, note.frontmatter)
+            modified.append(note_name)
+        self.rebuild()
+        return modified

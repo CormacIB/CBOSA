@@ -18,7 +18,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from cbosa.core.note_store import NoteStore
+from cbosa.core.link_index import LinkIndex
+from cbosa.core.note_store import DuplicateNoteError, NoteStore
 from cbosa.core.search_index import SearchIndex
 from cbosa.core.tag_index import TagIndex
 from cbosa.ui.panels import BasePanel
@@ -28,6 +29,7 @@ class NoteBrowserPanel(BasePanel):
     note_selected = pyqtSignal(str)
     note_created = pyqtSignal(str)
     note_deleted = pyqtSignal(str)
+    note_renamed = pyqtSignal(str, str)
 
     def __init__(
         self,
@@ -36,11 +38,15 @@ class NoteBrowserPanel(BasePanel):
         search_index: SearchIndex,
         title: str = "Note Browser",
         parent=None,
+        daily_store: NoteStore | None = None,
+        link_index: LinkIndex | None = None,
     ) -> None:
         super().__init__(title, parent)
         self._store = store
         self._tag_index = tag_index
         self._search_index = search_index
+        self._daily_store = daily_store
+        self._link_index = link_index
         self._tag_filter: str | None = None
         self._search_query: str = ""
 
@@ -71,6 +77,11 @@ class NoteBrowserPanel(BasePanel):
         new_btn.clicked.connect(self._prompt_create_note)
         btn_row.addWidget(new_btn)
 
+        self._rename_btn = QPushButton("Rename")
+        self._rename_btn.setEnabled(False)
+        self._rename_btn.clicked.connect(self._prompt_rename_note)
+        btn_row.addWidget(self._rename_btn)
+
         self._delete_btn = QPushButton("Delete Note")
         self._delete_btn.setEnabled(False)
         self._delete_btn.clicked.connect(self._delete_selected_note)
@@ -93,6 +104,15 @@ class NoteBrowserPanel(BasePanel):
         for name in self._visible_names():
             self._list.addItem(QListWidgetItem(name))
 
+    def select_note(self, name: str) -> None:
+        """Highlight *name* in the list without emitting note_selected."""
+        for i in range(self._list.count()):
+            if self._list.item(i).text() == name:
+                self._list.blockSignals(True)
+                self._list.setCurrentRow(i)
+                self._list.blockSignals(False)
+                return
+
     def set_tag_filter(self, tag: str) -> None:
         self._tag_filter = tag or None
         self.refresh()
@@ -114,6 +134,17 @@ class NoteBrowserPanel(BasePanel):
         self._store.delete(name)
         self.refresh()
         self.note_deleted.emit(name)
+
+    def rename_note(self, old_name: str, new_name: str) -> None:
+        """Rename a note and propagate [[old_name]] wikilinks to [[new_name]].
+
+        Raises DuplicateNoteError if new_name already exists.
+        """
+        self._store.rename(old_name, new_name)
+        if self._link_index is not None:
+            self._link_index.rename_note(old_name, new_name)
+        self.refresh()
+        self.note_renamed.emit(old_name, new_name)
 
     # ------------------------------------------------------------------
     # Private
@@ -139,7 +170,15 @@ class NoteBrowserPanel(BasePanel):
         else:
             names = set(self._store.all_names())
 
-        return sorted(names)
+        result = sorted(names)
+
+        if self._daily_store is not None and not self._search_query and not self._tag_filter:
+            daily = sorted(
+                f"daily/{n}" for n in self._daily_store.all_names()
+            )
+            result = result + daily
+
+        return result
 
     def _refresh_tag_combo(self) -> None:
         current = self._tag_combo.currentText()
@@ -162,12 +201,33 @@ class NoteBrowserPanel(BasePanel):
         self.note_selected.emit(item.text())
 
     def _on_selection_changed(self, current, _previous) -> None:
-        self._delete_btn.setEnabled(current is not None)
+        enabled = current is not None
+        self._delete_btn.setEnabled(enabled)
+        self._rename_btn.setEnabled(enabled)
 
     def _prompt_create_note(self) -> None:
         name, ok = QInputDialog.getText(self, "New Note", "Note name:")
         if ok and name.strip():
             self.create_note(name.strip())
+
+    def _prompt_rename_note(self) -> None:
+        item = self._list.currentItem()
+        if item is None:
+            return
+        old_name = item.text()
+        new_name, ok = QInputDialog.getText(
+            self, "Rename Note", "New name:", text=old_name
+        )
+        if not ok or not new_name.strip() or new_name.strip() == old_name:
+            return
+        try:
+            self.rename_note(old_name, new_name.strip())
+        except DuplicateNoteError:
+            QMessageBox.critical(
+                self,
+                "Rename Failed",
+                f"A note named '{new_name.strip()}' already exists.",
+            )
 
     def _delete_selected_note(self) -> None:
         item = self._list.currentItem()
