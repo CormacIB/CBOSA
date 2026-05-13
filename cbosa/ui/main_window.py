@@ -1,18 +1,24 @@
 """
 MainWindow — the top-level application window.
-Hosts the QDockWidget panel system (Issue #2).
+Hosts the panel system via CDockManager (Issue #17).
+
+Panels are CDockWidget instances (BasePanel subclasses) managed entirely by
+CDockManager, which is set as the central widget.  This gives 2-D tiling,
+tab groups, and floating windows out of the box.
 """
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
-from PyQt6.QtWidgets import QMainWindow, QLabel
-from PyQt6.QtCore import Qt, QByteArray
+from PyQt6.QtWidgets import QMainWindow
+from PyQt6.QtCore import QByteArray
 from PyQt6.QtGui import QKeySequence, QShortcut
+from PyQt6Ads import CDockManager, DockWidgetArea
 
 from cbosa.ui.panels import PanelRegistry, default_registry
 from cbosa.ui.command_palette import CommandPalette
+
 
 _DEFAULT_LAYOUT_PATH = Path.home() / ".cbosa" / "layout.json"
 
@@ -32,12 +38,8 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("CBOSA")
         self.resize(1280, 800)
 
-        self._placeholder = QLabel(
-            "Press Ctrl+P to add a panel",
-            alignment=Qt.AlignmentFlag.AlignCenter,
-        )
-        self._placeholder.setProperty("muted", "true")
-        self.setCentralWidget(self._placeholder)
+        self._dock_manager = CDockManager(self)
+        self.setCentralWidget(self._dock_manager)
 
         shortcut = QShortcut(QKeySequence("Ctrl+P"), self)
         shortcut.activated.connect(self.open_command_palette)
@@ -62,10 +64,9 @@ class MainWindow(QMainWindow):
         panel = cls(name, self)
         self._panel_instances[name] = panel
         self._wire_panels(name, panel)
-        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, panel)
+        self._dock_manager.addDockWidget(DockWidgetArea.RightDockWidgetArea, panel)
         self._open_panels.append(name)
-        panel.closed.connect(lambda: self._remove_panel(panel, name))
-        self._placeholder.setVisible(not self._open_panels)
+        panel.closed.connect(lambda n=name: self._remove_panel(n))
 
     # ------------------------------------------------------------------
     # Qt overrides
@@ -79,13 +80,12 @@ class MainWindow(QMainWindow):
     # Private
     # ------------------------------------------------------------------
 
-    def _remove_panel(self, panel: "BasePanel", name: str) -> None:
-        self.removeDockWidget(panel)
-        panel.setParent(None)
+    def _remove_panel(self, name: str) -> None:
+        panel = self._panel_instances.pop(name, None)
+        if panel is not None:
+            self._dock_manager.removeDockWidget(panel)
         if name in self._open_panels:
             self._open_panels.remove(name)
-        self._panel_instances.pop(name, None)
-        self._placeholder.setVisible(not self._open_panels)
 
     def _wire_panels(self, name: str, panel) -> None:
         if name == "Note Browser":
@@ -118,7 +118,7 @@ class MainWindow(QMainWindow):
         self._layout_path.parent.mkdir(parents=True, exist_ok=True)
         data = {
             "panels": list(self._open_panels),
-            "qt_state": self.saveState().toBase64().data().decode(),
+            "dock_state": self._dock_manager.saveState().toBase64().data().decode(),
         }
         self._layout_path.write_text(json.dumps(data), encoding="utf-8")
 
@@ -131,9 +131,11 @@ class MainWindow(QMainWindow):
             return
         for name in data.get("panels", []):
             self.add_panel(name)
-        qt_state = data.get("qt_state")
-        if qt_state:
+        dock_state = data.get("dock_state")
+        if dock_state:
             try:
-                self.restoreState(QByteArray.fromBase64(qt_state.encode()))
+                self._dock_manager.restoreState(
+                    QByteArray.fromBase64(dock_state.encode())
+                )
             except Exception:
                 pass  # corrupted state — panel positions reset, not a crash

@@ -15,7 +15,7 @@ cbosa/
   app.py              # Bootstrap: creates QApplication, loads theme, registers panels
   config.py           # Reads cbosa.toml; falls back to defaults on import
   ui/
-    main_window.py    # MainWindow (QMainWindow) — hosts dock widgets
+    main_window.py    # MainWindow (QMainWindow) — hosts CDockManager as central widget
     command_palette.py# Ctrl+P overlay for adding panels
     theme_engine.py   # Reads TOML → generates QSS → applies to QApplication
     panels/
@@ -57,7 +57,7 @@ data/
 
 ---
 
-## Issue status (as of 2026-05-11)
+## Issue status (as of 2026-05-13)
 
 | # | Title | Status |
 |---|-------|--------|
@@ -73,6 +73,8 @@ data/
 | 10 | Canvas LMS Sync + Panel | Done |
 | 11 | Capture Engine + Panel | Done |
 | 12 | AI Service Interface + NullAIService Wiring | Done |
+| 16 | Add PyQtAds dependency + migrate BasePanel to CDockWidget | Done |
+| 17 | Integrate CDockManager into MainWindow | Done |
 
 ---
 
@@ -143,6 +145,7 @@ size_heading = 18
 
 ```
 PyQt6>=6.7
+PyQt6Ads>=4.5.0       # Advanced Docking System — CDockManager, CDockWidget
 toml
 mistune>=3.0          # Markdown → HTML (note preview)
 python-frontmatter    # YAML frontmatter in .md files

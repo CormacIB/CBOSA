@@ -1,22 +1,20 @@
 from __future__ import annotations
 
-from PyQt6.QtWidgets import QDockWidget, QWidget
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtWidgets import QWidget
+from PyQt6Ads import CDockWidget
 
 
-class BasePanel(QDockWidget):
-    """Shared base for all dockable panels."""
+class BasePanel(CDockWidget):
+    """Shared base for all dockable panels.
 
-    closed = pyqtSignal()
+    Uses CDockWidget (PyQt6Ads) instead of QDockWidget, enabling 2-D tiling,
+    tab groups, and floating windows via CDockManager (wired in Issue #17).
+    The ``closed`` signal is inherited directly from CDockWidget.
+    """
 
     def __init__(self, title: str, parent=None) -> None:
         super().__init__(title, parent)
-        self.setAllowedAreas(Qt.DockWidgetArea.AllDockWidgetAreas)
         self.setWidget(QWidget())
-
-    def closeEvent(self, event) -> None:
-        self.closed.emit()
-        event.accept()
 
 
 class PanelRegistry:
