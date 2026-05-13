@@ -39,6 +39,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from cbosa.ai.service import AIService, NullAIService
 from cbosa.core.ledger import Ledger, LedgerError, TransactionNotFoundError
 from cbosa.ui.panels import BasePanel
 
@@ -63,9 +64,10 @@ class FinancePanel(BasePanel):
 
     transaction_changed = pyqtSignal()
 
-    def __init__(self, ledger: Ledger, title: str = "Finance", parent=None) -> None:
+    def __init__(self, ledger: Ledger, title: str = "Finance", parent=None, ai_service: AIService | None = None) -> None:
         super().__init__(title, parent)
         self._ledger = ledger
+        self._ai = ai_service or NullAIService()
         self._build_ui()
         self._refresh()
 

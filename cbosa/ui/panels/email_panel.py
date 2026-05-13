@@ -35,6 +35,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from cbosa.ai.service import AIService, NullAIService
 from cbosa.core.task_extractor import TaskExtractor
 from cbosa.modules.email_store import EmailStore
 from cbosa.ui.panels import BasePanel
@@ -50,10 +51,12 @@ class EmailPanel(BasePanel):
         store: EmailStore,
         title: str = "Email",
         parent=None,
+        ai_service: AIService | None = None,
     ) -> None:
         super().__init__(title, parent)
         self._store = store
         self._extractor = TaskExtractor()
+        self._ai = ai_service or NullAIService()
         self._build_ui()
 
     # ------------------------------------------------------------------

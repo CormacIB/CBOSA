@@ -6,6 +6,7 @@ import sys
 from PyQt6.QtWidgets import QApplication
 
 from cbosa import config
+from cbosa.ai import NullAIService
 from cbosa.core.daily_note import DailyNoteService
 from cbosa.core.ledger import Ledger
 from cbosa.core.link_index import LinkIndex
@@ -14,8 +15,12 @@ from cbosa.core.search_index import SearchIndex
 from cbosa.core.tag_index import TagIndex
 from cbosa.ui.theme_engine import ThemeEngine, ThemeLoadError
 from cbosa.ui.main_window import MainWindow
+from cbosa.modules.canvas_store import CanvasStore
+from cbosa.modules.capture_engine import CaptureEngine
 from cbosa.modules.email_store import EmailStore
-from cbosa.ui.panels import default_registry, BasePanel
+from cbosa.ui.panels import default_registry
+from cbosa.ui.panels.canvas_panel import CanvasPanel
+from cbosa.ui.panels.capture_panel import CapturePanel
 from cbosa.ui.panels.email_panel import EmailPanel
 from cbosa.ui.panels.finance_panel import FinancePanel
 from cbosa.ui.panels.graph_view import GraphViewPanel
@@ -27,6 +32,7 @@ def _register_panels(registry=None) -> None:
     if registry is None:
         registry = default_registry
 
+    ai_service = NullAIService()
     base_data_dir = config.resolve("data_dir", "data")
     store = NoteStore(base_data_dir / "notes")
     daily_store = NoteStore(base_data_dir / "daily")
@@ -50,7 +56,7 @@ def _register_panels(registry=None) -> None:
     registry.register(
         "Note Editor",
         lambda title, parent: NoteEditorPanel(
-            store, link_index, title, parent, daily_store=daily_store
+            store, link_index, title, parent, daily_store=daily_store, ai_service=ai_service
         ),
     )
     registry.register(
@@ -61,15 +67,27 @@ def _register_panels(registry=None) -> None:
     ledger = Ledger(ledger_path)
     registry.register(
         "Finance",
-        lambda title, parent: FinancePanel(ledger, title, parent),
+        lambda title, parent: FinancePanel(ledger, title, parent, ai_service=ai_service),
     )
     email_db_path = base_data_dir / "email.db"
     email_store = EmailStore(email_db_path)
     registry.register(
         "Email",
-        lambda title, parent: EmailPanel(email_store, title, parent),
+        lambda title, parent: EmailPanel(email_store, title, parent, ai_service=ai_service),
     )
-    registry.register("Canvas", BasePanel)
+    canvas_db_path = base_data_dir / "canvas.db"
+    canvas_store = CanvasStore(canvas_db_path)
+    registry.register(
+        "Canvas",
+        lambda title, parent: CanvasPanel(canvas_store, title, parent),
+    )
+    capture_engine = CaptureEngine(ai_service=ai_service)
+    registry.register(
+        "Capture",
+        lambda title, parent: CapturePanel(
+            capture_engine, store, all_notes_store=store, title=title, parent=parent
+        ),
+    )
 
 
 def create_app(argv=None) -> QApplication:

@@ -26,6 +26,7 @@ from PyQt6.QtGui import (
 )
 from PyQt6.QtWidgets import QPlainTextEdit, QVBoxLayout, QWidget
 
+from cbosa.ai.service import AIService, NullAIService
 from cbosa.core.link_index import LinkIndex
 from cbosa.core.note_store import NoteNotFoundError, NoteStore
 from cbosa.ui.panels import BasePanel
@@ -136,11 +137,13 @@ class NoteEditorPanel(BasePanel):
         title: str = "Note Editor",
         parent=None,
         daily_store: NoteStore | None = None,
+        ai_service: AIService | None = None,
     ) -> None:
         super().__init__(title, parent)
         self._store = store
         self._link_index = link_index
         self._daily_store = daily_store
+        self._ai = ai_service or NullAIService()
         self._current_note: str | None = None
 
         container = QWidget()
