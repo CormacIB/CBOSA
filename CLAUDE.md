@@ -80,6 +80,7 @@ GitHub repo: CormacIB/CBOSA
 | 18 | Migrate layout persistence to PyQtAds state serialization | Done |
 | 19 | Theme PyQtAds panel chrome via ThemeEngine QSS | Done |
 | 20 | Task dataclass (shared core) | Done |
+| 21 | OllamaAIService + [ai] config + availability warning | Done |
 
 ---
 

@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from PyQt6.QtWidgets import QMainWindow
+from PyQt6.QtWidgets import QLabel, QMainWindow
 from PyQt6.QtCore import QByteArray
 from PyQt6.QtGui import QKeySequence, QShortcut
 from PyQt6Ads import CDockManager, DockWidgetArea
@@ -28,6 +28,7 @@ class MainWindow(QMainWindow):
         self,
         registry: PanelRegistry | None = None,
         layout_path: Path | str | None = None,
+        ai_available: bool = True,
     ) -> None:
         super().__init__()
         self._registry = registry or default_registry
@@ -40,6 +41,10 @@ class MainWindow(QMainWindow):
 
         self._dock_manager = CDockManager(self)
         self.setCentralWidget(self._dock_manager)
+
+        if not ai_available:
+            label = QLabel("AI unavailable — Ollama not reachable")
+            self.statusBar().addPermanentWidget(label)
 
         shortcut = QShortcut(QKeySequence("Ctrl+P"), self)
         shortcut.activated.connect(self.open_command_palette)

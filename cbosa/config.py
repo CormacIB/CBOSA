@@ -11,6 +11,11 @@ PROJECT_ROOT = Path(__file__).parent.parent
 _DEFAULT_CONFIG = {
     "theme": "themes/dark_default.toml",
     "data_dir": "data",
+    "ai": {
+        "backend": "null",
+        "endpoint": "http://localhost:11434",
+        "model": "",
+    },
 }
 
 _config: dict = {}

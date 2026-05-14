@@ -28,11 +28,11 @@ from cbosa.ui.panels.note_browser import NoteBrowserPanel
 from cbosa.ui.panels.note_editor import NoteEditorPanel
 
 
-def _register_panels(registry=None) -> None:
+def _register_panels(registry=None) -> bool:
+    """Register all panels and return True if AI backend is reachable."""
     if registry is None:
         registry = default_registry
 
-    ai_service = NullAIService()
     base_data_dir = config.resolve("data_dir", "data")
     store = NoteStore(base_data_dir / "notes")
     daily_store = NoteStore(base_data_dir / "daily")
@@ -45,6 +45,24 @@ def _register_panels(registry=None) -> None:
     link_index.rebuild()
     search_index = SearchIndex(store)
     search_index.rebuild()
+
+    ai_cfg = config.get("ai", {})
+    backend = ai_cfg.get("backend", "null")
+    endpoint = ai_cfg.get("endpoint", "http://localhost:11434")
+    model = ai_cfg.get("model", "")
+
+    if backend == "ollama":
+        import httpx
+        from cbosa.ai.ollama_service import OllamaAIService
+        ai_service = OllamaAIService(endpoint, model, search_index)
+        try:
+            resp = httpx.get(f"{endpoint}/api/tags", timeout=2.0)
+            ai_available = resp.status_code == 200
+        except Exception:
+            ai_available = False
+    else:
+        ai_service = NullAIService()
+        ai_available = True  # null backend is intentional — no warning needed
 
     registry.register(
         "Note Browser",
@@ -89,6 +107,8 @@ def _register_panels(registry=None) -> None:
         ),
     )
 
+    return ai_available
+
 
 def create_app(argv=None) -> QApplication:
     """Create and configure the QApplication instance."""
@@ -114,7 +134,7 @@ def _apply_theme(app: QApplication) -> None:
 def run() -> int:
     """Entry point — create app, show window, start event loop."""
     app = create_app()
-    _register_panels()
-    window = MainWindow()
+    ai_available = _register_panels()
+    window = MainWindow(ai_available=ai_available)
     window.show()
     return app.exec()
