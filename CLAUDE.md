@@ -57,7 +57,9 @@ data/
 
 ---
 
-## Issue status (as of 2026-05-13)
+## Issue status (as of 2026-05-14)
+
+GitHub repo: CormacIB/CBOSA
 
 | # | Title | Status |
 |---|-------|--------|
@@ -77,6 +79,7 @@ data/
 | 17 | Integrate CDockManager into MainWindow | Done |
 | 18 | Migrate layout persistence to PyQtAds state serialization | Done |
 | 19 | Theme PyQtAds panel chrome via ThemeEngine QSS | Done |
+| 20 | Task dataclass (shared core) | Done |
 
 ---
 
