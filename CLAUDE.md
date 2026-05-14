@@ -76,6 +76,7 @@ data/
 | 16 | Add PyQtAds dependency + migrate BasePanel to CDockWidget | Done |
 | 17 | Integrate CDockManager into MainWindow | Done |
 | 18 | Migrate layout persistence to PyQtAds state serialization | Done |
+| 19 | Theme PyQtAds panel chrome via ThemeEngine QSS | Done |
 
 ---
 

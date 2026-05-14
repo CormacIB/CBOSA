@@ -79,3 +79,101 @@ def test_load_malformed_toml_raises_theme_load_error(tmp_path):
     engine = ThemeEngine()
     with pytest.raises(ThemeLoadError, match="parse"):
         engine.load(str(bad_file))
+
+
+# ---------------------------------------------------------------------------
+# PyQtAds chrome — Issue #19
+# ---------------------------------------------------------------------------
+
+def test_qss_contains_ads_title_bar_selector(theme_file):
+    """QSS output includes the PyQtAds CDockWidgetTitleBar selector (tracer bullet)."""
+    engine = ThemeEngine()
+    qss = engine.load(theme_file)
+    assert "ads--CDockWidgetTitleBar" in qss
+
+
+def test_title_bar_uses_surface_background(theme_file):
+    """CDockWidgetTitleBar block uses the surface color as its background."""
+    engine = ThemeEngine()
+    qss = engine.load(theme_file)
+    title_bar_idx = qss.index("ads--CDockWidgetTitleBar")
+    block_end = qss.index("}", title_bar_idx)
+    title_bar_block = qss[title_bar_idx:block_end]
+    assert "#16213e" in title_bar_block  # surface from VALID_TOML
+
+
+def test_title_bar_uses_text_foreground(theme_file):
+    """CDockWidgetTitleBar block uses the text color as its foreground."""
+    engine = ThemeEngine()
+    qss = engine.load(theme_file)
+    title_bar_idx = qss.index("ads--CDockWidgetTitleBar")
+    block_end = qss.index("}", title_bar_idx)
+    title_bar_block = qss[title_bar_idx:block_end]
+    assert "#eaeaea" in title_bar_block  # text from VALID_TOML
+
+
+def test_active_tab_uses_accent_color(theme_file):
+    """Active tab selector uses accent color to be visually distinct."""
+    engine = ThemeEngine()
+    qss = engine.load(theme_file)
+    active_tab_selector = 'ads--CDockWidgetTab[activeTab="true"]'
+    assert active_tab_selector in qss
+    active_tab_idx = qss.index(active_tab_selector)
+    block_end = qss.index("}", active_tab_idx)
+    active_tab_block = qss[active_tab_idx:block_end]
+    assert "#e94560" in active_tab_block  # accent from VALID_TOML
+
+
+def test_tab_bar_uses_surface_background(theme_file):
+    """CDockAreaTabBar uses the surface color as its background."""
+    engine = ThemeEngine()
+    qss = engine.load(theme_file)
+    assert "ads--CDockAreaTabBar" in qss
+    tab_bar_idx = qss.index("ads--CDockAreaTabBar")
+    block_end = qss.index("}", tab_bar_idx)
+    tab_bar_block = qss[tab_bar_idx:block_end]
+    assert "#16213e" in tab_bar_block  # surface from VALID_TOML
+
+
+def test_title_bar_buttons_use_text_color(theme_file):
+    """CTitleBarButton is styled with the text color so buttons are visible."""
+    engine = ThemeEngine()
+    qss = engine.load(theme_file)
+    assert "CTitleBarButton" in qss
+    btn_idx = qss.index("CTitleBarButton")
+    block_end = qss.index("}", btn_idx)
+    btn_block = qss[btn_idx:block_end]
+    assert "#eaeaea" in btn_block  # text from VALID_TOML
+
+
+def test_splitter_handle_uses_border_color(theme_file):
+    """CDockSplitter handle is styled with the border color so it's visible."""
+    engine = ThemeEngine()
+    qss = engine.load(theme_file)
+    assert "ads--CDockSplitter" in qss
+    splitter_idx = qss.index("ads--CDockSplitter")
+    block_end = qss.index("}", splitter_idx)
+    splitter_block = qss[splitter_idx:block_end]
+    assert "#2a2a4a" in splitter_block  # border from VALID_TOML
+
+
+def test_dark_default_theme_has_ads_chrome():
+    """Loading dark_default.toml produces PyQtAds chrome selectors."""
+    import pathlib
+    themes_dir = pathlib.Path(__file__).parent.parent / "themes"
+    engine = ThemeEngine()
+    qss = engine.load(str(themes_dir / "dark_default.toml"))
+    assert "ads--CDockWidgetTitleBar" in qss
+    assert "ads--CDockWidgetTab" in qss
+    assert "ads--CDockSplitter" in qss
+
+
+def test_light_theme_has_ads_chrome():
+    """Loading light.toml produces PyQtAds chrome selectors."""
+    import pathlib
+    themes_dir = pathlib.Path(__file__).parent.parent / "themes"
+    engine = ThemeEngine()
+    qss = engine.load(str(themes_dir / "light.toml"))
+    assert "ads--CDockWidgetTitleBar" in qss
+    assert "ads--CDockWidgetTab" in qss
+    assert "ads--CDockSplitter" in qss

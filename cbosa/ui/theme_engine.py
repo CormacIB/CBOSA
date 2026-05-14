@@ -176,4 +176,69 @@ QStatusBar {{
     color: {text_muted};
     font-size: {size_small}px;
 }}
+
+/* ------------------------------------------------------------------ */
+/* PyQtAds chrome — Issue #19                                          */
+/* ------------------------------------------------------------------ */
+
+ads--CDockManager {{
+    background-color: {bg};
+}}
+
+ads--CDockWidget {{
+    background-color: {surface};
+}}
+
+ads--CDockWidgetTitleBar {{
+    background-color: {surface};
+    color: {text};
+    border-bottom: 1px solid {border};
+    padding: 0px 4px;
+}}
+
+CTitleBarButton {{
+    color: {text};
+    background-color: transparent;
+    border: none;
+    padding: 2px 4px;
+}}
+
+CTitleBarButton:hover {{
+    background-color: {primary};
+    color: {text};
+}}
+
+ads--CDockAreaWidget {{
+    background-color: {bg};
+}}
+
+ads--CDockAreaTitleBar {{
+    background-color: {surface};
+    border-bottom: 1px solid {border};
+    padding: 0px;
+}}
+
+ads--CDockAreaTabBar {{
+    background-color: {surface};
+    border-bottom: 1px solid {border};
+}}
+
+ads--CDockWidgetTab {{
+    background-color: {surface};
+    color: {text_muted};
+    border-top: 2px solid transparent;
+    padding: 4px 8px;
+    font-family: "{family}";
+    font-size: {size_small}px;
+}}
+
+ads--CDockWidgetTab[activeTab="true"] {{
+    background-color: {bg};
+    color: {text};
+    border-top: 2px solid {accent};
+}}
+
+ads--CDockSplitter::handle {{
+    background-color: {border};
+}}
 """.strip()
