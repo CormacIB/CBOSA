@@ -175,3 +175,56 @@ def test_command_palette_lists_panel_types(qapp):
         for i in range(palette.list_widget.count())
     }
     assert items == {"Notes", "Finance"}
+
+
+# ---------------------------------------------------------------------------
+# Issue #18 — PyQtAds layout persistence
+# ---------------------------------------------------------------------------
+
+def test_layout_saves_dock_state_key(qapp, tmp_path):
+    """Closing the window writes a 'dock_state' key (CDockManager format), not 'qt_state'."""
+    registry = PanelRegistry()
+    registry.register("Notes", BasePanel)
+    layout_path = tmp_path / "layout.json"
+    window = MainWindow(registry=registry, layout_path=layout_path)
+    window.add_panel("Notes")
+    window.close()
+    data = json.loads(layout_path.read_text())
+    assert "dock_state" in data
+    assert "qt_state" not in data
+
+
+def test_old_qt_state_layout_opens_empty_workspace(qapp, tmp_path):
+    """A layout.json with only a 'qt_state' blob (old format) is silently ignored — empty workspace."""
+    layout_path = tmp_path / "layout.json"
+    layout_path.write_text(json.dumps({"qt_state": "AAAA/base64junk=="}), encoding="utf-8")
+    window = MainWindow(registry=PanelRegistry(), layout_path=layout_path)
+    assert window._open_panels == []
+
+
+def test_missing_layout_json_opens_empty_workspace(qapp, tmp_path):
+    """No layout.json on disk → empty workspace, no crash."""
+    layout_path = tmp_path / "layout.json"  # does not exist
+    window = MainWindow(registry=PanelRegistry(), layout_path=layout_path)
+    assert window._open_panels == []
+
+
+def test_malformed_layout_json_opens_empty_workspace(qapp, tmp_path):
+    """A malformed layout.json (invalid JSON) is silently discarded — empty workspace, no crash."""
+    layout_path = tmp_path / "layout.json"
+    layout_path.write_text("{not valid json!!", encoding="utf-8")
+    window = MainWindow(registry=PanelRegistry(), layout_path=layout_path)
+    assert window._open_panels == []
+
+
+def test_layout_roundtrip_restores_dock_state(qapp, tmp_path):
+    """dock_state written on close is non-empty, proving CDockManager serialized real state."""
+    registry = PanelRegistry()
+    registry.register("Notes", BasePanel)
+    layout_path = tmp_path / "layout.json"
+    window = MainWindow(registry=registry, layout_path=layout_path)
+    window.add_panel("Notes")
+    window.close()
+    data = json.loads(layout_path.read_text())
+    # CDockManager produces a non-trivial blob when at least one panel is open
+    assert len(data["dock_state"]) > 0

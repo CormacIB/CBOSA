@@ -39,7 +39,7 @@ Ctrl+P lists Notes, Finance, Email, and Canvas, but all open an empty `BasePanel
 
 ---
 
-## KI-4: Theme and config paths are relative to the working directory
+## KI-4: Theme and config paths are relative to the working directory -- YIIIKEEES
 
 **Area:** Issue #1 — `cbosa/config.py`, `cbosa/app.py`
 **Status:** Fixed
