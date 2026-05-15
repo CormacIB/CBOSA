@@ -21,6 +21,33 @@ class ThemeEngine:
         Raises:
             ThemeLoadError: if the file does not exist or cannot be parsed.
         """
+        colors, fonts = self._parse_theme(theme_path)
+        return self._build_qss(colors, fonts)
+
+    def apply(self, app, theme_path: str) -> None:
+        """Load a theme and apply style + stylesheet + palette to the QApplication.
+
+        Three layers are set in order:
+        1. Base style → "Windows" (flat, no Fusion gradients) so that PyQt6Ads
+           widgets which paint themselves via drawPrimitive/drawControl get a
+           solid-fill from the palette instead of Fusion's lighter→darker gradient.
+           CDockAreaTitleBar has WA_StyledBackground=False so QSS background-color
+           is ignored for it; it falls back to palette + base style painting.
+        2. QSS stylesheet → full control over all standard Qt widgets.
+        3. QPalette → colour roles used by palette-painting widgets (PyQt6Ads chrome).
+        """
+        from PyQt6.QtWidgets import QStyleFactory
+        app.setStyle(QStyleFactory.create("Windows"))
+        colors, fonts = self._parse_theme(theme_path)
+        app.setStyleSheet(self._build_qss(colors, fonts))
+        app.setPalette(self._build_palette(colors))
+
+    # ------------------------------------------------------------------
+    # Private
+    # ------------------------------------------------------------------
+
+    def _parse_theme(self, theme_path: str) -> tuple:
+        """Read and parse a TOML theme file. Returns (colors, fonts) dicts."""
         try:
             with open(theme_path, "r", encoding="utf-8-sig") as f:
                 raw = f.read()
@@ -32,15 +59,41 @@ class ThemeEngine:
         except toml.TomlDecodeError as exc:
             raise ThemeLoadError(f"Failed to parse theme file: {exc}")
 
-        colors = data.get("colors", {})
-        fonts = data.get("fonts", {})
+        return data.get("colors", {}), data.get("fonts", {})
 
-        return self._build_qss(colors, fonts)
+    def _build_palette(self, colors: dict):
+        """Build a QPalette from theme colors so palette-based widgets are dark-themed."""
+        from PyQt6.QtGui import QPalette, QColor
 
-    def apply(self, app, theme_path: str) -> None:
-        """Load a theme and apply it to the running QApplication."""
-        qss = self.load(theme_path)
-        app.setStyleSheet(qss)
+        bg      = QColor(colors.get("background", "#000000"))
+        surface = QColor(colors.get("surface",    "#111111"))
+        text    = QColor(colors.get("text",        "#ffffff"))
+        muted   = QColor(colors.get("text_muted",  "#888888"))
+        accent  = QColor(colors.get("accent",      "#ffffff"))
+        border  = QColor(colors.get("border",      "#333333"))
+
+        p = QPalette()
+        p.setColor(QPalette.ColorRole.Window,          surface)
+        p.setColor(QPalette.ColorRole.WindowText,      text)
+        p.setColor(QPalette.ColorRole.Base,            bg)
+        p.setColor(QPalette.ColorRole.AlternateBase,   surface)
+        p.setColor(QPalette.ColorRole.Text,            text)
+        p.setColor(QPalette.ColorRole.BrightText,      text)
+        p.setColor(QPalette.ColorRole.Button,          surface)
+        p.setColor(QPalette.ColorRole.ButtonText,      text)
+        p.setColor(QPalette.ColorRole.Highlight,       accent)
+        p.setColor(QPalette.ColorRole.HighlightedText, text)
+        p.setColor(QPalette.ColorRole.PlaceholderText, muted)
+        p.setColor(QPalette.ColorRole.Mid,             border)
+        p.setColor(QPalette.ColorRole.Dark,            bg)
+        p.setColor(QPalette.ColorRole.Shadow,          bg)
+        # PyQt6Ads' built-in stylesheet uses:
+        #   background: qlineargradient(stop:0 palette(window), stop:1 palette(light))
+        # for the active tab.  Setting Light = Midlight = surface collapses both
+        # gradient stops to the same colour, producing a flat solid fill.
+        p.setColor(QPalette.ColorRole.Light,           surface)
+        p.setColor(QPalette.ColorRole.Midlight,        surface)
+        return p
 
     # ------------------------------------------------------------------
     # Private
@@ -50,7 +103,7 @@ class ThemeEngine:
         bg = colors.get("background", "#000000")
         surface = colors.get("surface", "#111111")
         primary = colors.get("primary", "#222222")
-        accent = colors.get("accent", "#ffffff")
+        accent = colors.get("accent", "#d40b0b")
         text = colors.get("text", "#ffffff")
         text_muted = colors.get("text_muted", "#888888")
         border = colors.get("border", "#333333")
@@ -171,6 +224,71 @@ QSplitter::handle {{
     background-color: {border};
 }}
 
+QTabWidget::pane {{
+    background-color: {bg};
+    border: 1px solid {border};
+}}
+
+QTabBar {{
+    background-color: {surface};
+}}
+
+QTabBar::tab {{
+    background-color: {surface};
+    color: {text};
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 4px 12px;
+    font-size: {size_small}px;
+}}
+
+QTabBar::tab:selected {{
+    background-color: {surface};
+    color: {text};
+    border-bottom: 2px solid {accent};
+}}
+
+QTabBar::tab:hover:!selected {{
+    background-color: {surface};
+    color: {text};
+}}
+
+QHeaderView {{
+    background-color: {surface};
+    color: {text};
+    border: none;
+}}
+
+QHeaderView::section {{
+    background-color: {surface};
+    color: {text};
+    border: none;
+    border-right: 1px solid {border};
+    border-bottom: 1px solid {border};
+    padding: 4px 6px;
+    font-size: {size_small}px;
+}}
+
+QComboBox {{
+    background-color: {surface};
+    color: {text};
+    border: 1px solid {border};
+    padding: 2px 6px;
+    font-size: {size_base}px;
+}}
+
+QComboBox::drop-down {{
+    border: none;
+    width: 20px;
+}}
+
+QComboBox QAbstractItemView {{
+    background-color: {surface};
+    color: {text};
+    border: 1px solid {border};
+    selection-background-color: {accent};
+}}
+
 QStatusBar {{
     background-color: {surface};
     color: {text_muted};
@@ -225,17 +343,27 @@ ads--CDockAreaTabBar {{
 
 ads--CDockWidgetTab {{
     background-color: {surface};
-    color: {text_muted};
+    color: {text};
     border-top: 2px solid transparent;
     padding: 4px 8px;
     font-family: "{family}";
     font-size: {size_small}px;
 }}
 
+ads--CDockWidgetTab QLabel {{
+    background-color: transparent;
+    color: {text};
+}}
+
 ads--CDockWidgetTab[activeTab="true"] {{
-    background-color: {bg};
+    background-color: {surface};
     color: {text};
     border-top: 2px solid {accent};
+}}
+
+ads--CDockWidgetTab[activeTab="true"] QLabel {{
+    background-color: transparent;
+    color: {text};
 }}
 
 ads--CDockSplitter::handle {{

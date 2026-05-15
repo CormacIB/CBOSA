@@ -16,7 +16,9 @@ from __future__ import annotations
 import imaplib
 import email as _email_mod
 import email.header
+import email.utils
 import sqlite3
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
 
@@ -25,7 +27,7 @@ try:
 except ImportError:
     toml = None  # type: ignore[assignment]
 
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import Qt, QThread, pyqtSignal
 
 _SECRETS_PATH = Path.home() / ".cbosa" / "secrets.toml"
 
@@ -167,6 +169,13 @@ class EmailStore:
         """Return total number of cached emails."""
         return self._conn.execute("SELECT COUNT(*) FROM emails").fetchone()[0]
 
+    def has_uid(self, uid: str) -> bool:
+        """Return True if an email with the given UID is already cached."""
+        row = self._conn.execute(
+            "SELECT 1 FROM emails WHERE uid = ?", (uid,)
+        ).fetchone()
+        return row is not None
+
     def clear(self) -> None:
         """Delete all cached emails from the local store."""
         self._conn.execute("DELETE FROM emails")
@@ -190,7 +199,7 @@ class EmailStore:
             return
 
         self._worker = ImapSyncWorker(self, creds)
-        self._worker.finished.connect(on_done)
+        self._worker.finished.connect(on_done, Qt.ConnectionType.QueuedConnection)
         self._worker.start()
 
     # ------------------------------------------------------------------
@@ -224,31 +233,106 @@ class ImapSyncWorker(QThread):
             self.finished.emit(0, str(exc))
 
 
+def _within_24h(date_header: str, cutoff: datetime) -> bool:
+    """Return True if the RFC 2822 date header is at or after cutoff."""
+    try:
+        msg_dt = email.utils.parsedate_to_datetime(date_header)
+        if msg_dt.tzinfo is None:
+            msg_dt = msg_dt.replace(tzinfo=timezone.utc)
+        return msg_dt >= cutoff
+    except Exception:
+        return True  # include if date is unparseable
+
+
 def _fetch_imap(store: EmailStore, creds: dict, max_emails: int = 50) -> int:
-    """Connect to IMAP, fetch recent emails, insert into store. Returns count."""
+    """
+    Fetch emails from the last 24 hours and insert only those not already cached.
+
+    Uses imap.search() + imap.fetch("(RFC822)") — the exact mechanism from the
+    original committed code, proven to work with Python's imaplib.
+
+    Sequence numbers are used as cache keys (same as the original).  This is
+    correct in the common case; the only edge case is a message deleted between
+    syncs causing sequence numbers to shift, which would cause one email to be
+    skipped — an acceptable trade-off vs. the complexity of UID commands.
+
+    Strategy:
+      Gmail  — SEARCH X-GM-RAW "in:primary" (excludes Social/Promotions).
+      Other  — SEARCH ALL, take the most recent max_emails sequence numbers.
+
+    IMAP SINCE is deliberately avoided: its date format uses locale-specific
+    month abbreviations on some platforms, producing invalid syntax that causes
+    servers to silently return empty results.
+
+    Only emails whose sequence-number key is not already in the cache are
+    fetched and counted, so the returned count reflects genuinely new emails.
+    """
     host = creds["host"]
     port = int(creds.get("port", 993))
     username = creds["username"]
     password = creds["password"]
 
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+    is_gmail = "gmail" in host.lower() or "googlemail" in host.lower()
+
     with imaplib.IMAP4_SSL(host, port) as imap:
         imap.login(username, password)
-        imap.select("INBOX", readonly=False)
-        _, data = imap.search(None, "UNSEEN")
-        uids = data[0].split()
-        recent = uids[-max_emails:] if len(uids) > max_emails else uids
+        imap.select("INBOX", readonly=True)
+
+        if is_gmail:
+            # X-GM-RAW "in:primary" restricts to the Primary tab (Gmail categories).
+            # Falls back to ALL if the search errors or returns nothing — the latter
+            # happens when Gmail categories/tabs are not enabled on the account.
+            try:
+                _, data = imap.search(None, 'X-GM-RAW', '"in:primary"')
+                seq_list = data[0].split() if data and data[0] else []
+            except imaplib.IMAP4.error:
+                seq_list = []
+            if not seq_list:
+                _, data = imap.search(None, "ALL")
+                seq_list = data[0].split() if data and data[0] else []
+        else:
+            _, data = imap.search(None, "ALL")
+            seq_list = data[0].split() if data and data[0] else []
+        if not seq_list:
+            return 0
+
+        # Sequence numbers are ascending (higher = newer); take the most recent.
+        candidate_seqs = seq_list[-max_emails:]
+
         count = 0
-        for uid_bytes in reversed(recent):
-            uid = uid_bytes.decode()
-            _, msg_data = imap.fetch(uid_bytes, "(RFC822)")
+        for seq_bytes in reversed(candidate_seqs):  # newest → oldest
+            uid = seq_bytes.decode()
+            if store.has_uid(uid):
+                continue  # already cached — do not re-fetch or re-count
+
+            _, msg_data = imap.fetch(seq_bytes, "(RFC822)")
+            if not msg_data or msg_data[0] is None:
+                continue
             raw = msg_data[0][1]
             msg = _email_mod.message_from_bytes(raw)
+
+            # Skip bulk/promotional/social emails.  List-Unsubscribe is required
+            # by Gmail's sender policy for all bulk mail (promotions, social
+            # notifications, newsletters).  Precedence: bulk/list covers older
+            # mailing-list conventions.  Together these two headers catch the
+            # same emails Gmail tabs classify as Social or Promotions.
+            if msg.get("List-Unsubscribe") or \
+                    msg.get("Precedence", "").lower() in ("bulk", "list", "junk"):
+                continue
+
+            raw_date = msg.get("Date", "")
+            if not _within_24h(raw_date, cutoff):
+                continue  # date header can differ from arrival order; check all
             subject = _decode_header(msg.get("Subject", ""))
             sender = _decode_header(msg.get("From", ""))
-            date_str = msg.get("Date", "")[:10]
+            try:
+                parsed_dt = email.utils.parsedate_to_datetime(raw_date)
+                date_str = parsed_dt.strftime("%Y-%m-%d")
+            except Exception:
+                date_str = ""
             body = _extract_body(msg)
             store.insert_email(uid, subject, sender, date_str, body)
-            imap.store(uid_bytes, "+FLAGS", "\\Seen")
             count += 1
         return count
 

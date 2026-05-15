@@ -105,10 +105,10 @@ def test_with_credentials_message_reader_exists(panel_with_emails):
     assert len(reader) == 1
 
 
-def test_with_credentials_tasks_list_exists(panel_with_emails):
+def test_with_credentials_action_items_list_exists(panel_with_emails):
     from PyQt6.QtWidgets import QListWidget
-    tasks = panel_with_emails.widget().findChildren(QListWidget, "tasks_list")
-    assert len(tasks) == 1
+    lst = panel_with_emails.widget().findChildren(QListWidget, "action_items_list")
+    assert len(lst) == 1
 
 
 def test_with_credentials_sync_button_exists(panel_with_emails):
@@ -177,32 +177,6 @@ def test_selecting_email_shows_body_in_reader(panel_with_emails):
     text = panel_with_emails._message_reader.toPlainText()
     assert "Could you review" in text
 
-
-# ---------------------------------------------------------------------------
-# Slice 6 — selecting an email populates extracted tasks
-# ---------------------------------------------------------------------------
-
-def test_selecting_email_with_action_items_shows_tasks(panel_with_emails):
-    panel_with_emails._inbox_list.setCurrentRow(1)  # alice email has action items
-    assert panel_with_emails._tasks_list.count() >= 1
-
-
-def test_selecting_email_tasks_contain_action_text(panel_with_emails):
-    panel_with_emails._inbox_list.setCurrentRow(1)
-    task_texts = [
-        panel_with_emails._tasks_list.item(i).text()
-        for i in range(panel_with_emails._tasks_list.count())
-    ]
-    assert any("review" in t.lower() or "let me know" in t.lower() for t in task_texts)
-
-
-def test_selecting_different_email_refreshes_tasks(panel_with_emails):
-    panel_with_emails._inbox_list.setCurrentRow(1)
-    count_first = panel_with_emails._tasks_list.count()
-    panel_with_emails._inbox_list.setCurrentRow(0)
-    count_second = panel_with_emails._tasks_list.count()
-    assert count_first >= 1
-    assert count_second >= 1
 
 
 # ---------------------------------------------------------------------------
@@ -273,6 +247,7 @@ def test_on_sync_done_with_error_shows_error(panel_with_emails):
 
 def test_on_sync_done_success_shows_count(panel_with_emails):
     panel_with_emails._on_sync_done(5, "")
+    panel_with_emails._action_item_worker.wait()
     assert "5" in panel_with_emails._status_label.text()
     assert panel_with_emails._sync_btn.isEnabled()
 
@@ -288,6 +263,7 @@ def test_sync_done_refreshes_inbox(qapp, monkeypatch):
     assert panel._inbox_list.count() == 0
     store.insert_email("uid-1", "Hello", "x@example.com", "2026-05-10", "body")
     panel._on_sync_done(1, "")
+    panel._action_item_worker.wait()
     assert panel._inbox_list.count() == 1
     store.close()
 
@@ -300,7 +276,6 @@ def test_reader_empty_when_no_email_selected(panel_with_emails):
     panel_with_emails._inbox_list.setCurrentRow(0)
     panel_with_emails._on_email_selected(None, None)
     assert panel_with_emails._message_reader.toPlainText() == ""
-    assert panel_with_emails._tasks_list.count() == 0
 
 
 # ---------------------------------------------------------------------------
@@ -329,27 +304,210 @@ def test_clear_btn_exists(panel_with_emails):
 def test_on_clear_empties_inbox_list(panel_with_emails):
     assert panel_with_emails._inbox_list.count() == 2
     panel_with_emails._on_clear()
+    panel_with_emails._action_item_worker.wait()
     assert panel_with_emails._inbox_list.count() == 0
 
 
 def test_on_clear_empties_store(panel_with_emails, store_with_emails):
     assert store_with_emails.count() == 2
     panel_with_emails._on_clear()
+    panel_with_emails._action_item_worker.wait()
     assert store_with_emails.count() == 0
 
 
 def test_on_clear_clears_reader(panel_with_emails):
     panel_with_emails._inbox_list.setCurrentRow(0)
     panel_with_emails._on_clear()
+    panel_with_emails._action_item_worker.wait()
     assert panel_with_emails._message_reader.toPlainText() == ""
 
 
-def test_on_clear_clears_tasks(panel_with_emails):
-    panel_with_emails._inbox_list.setCurrentRow(0)
+def test_on_clear_empties_action_items(panel_with_emails, qapp):
     panel_with_emails._on_clear()
-    assert panel_with_emails._tasks_list.count() == 0
+    panel_with_emails._action_item_worker.wait()
+    qapp.processEvents()
+    assert panel_with_emails._action_items_list.count() == 0
 
 
 def test_on_clear_updates_status_label(panel_with_emails):
     panel_with_emails._on_clear()
+    panel_with_emails._action_item_worker.wait()
     assert "cleared" in panel_with_emails._status_label.text().lower()
+
+
+# ---------------------------------------------------------------------------
+# Slice 15 — EmailPanel has a QTabWidget when credentials are present
+# ---------------------------------------------------------------------------
+
+def test_has_tab_widget_when_credentials_present(panel_with_emails):
+    from PyQt6.QtWidgets import QTabWidget
+    tabs = panel_with_emails.widget().findChildren(QTabWidget, "email_tabs")
+    assert len(tabs) == 1
+
+
+# ---------------------------------------------------------------------------
+# Slice 16 — Action Items tab is index 0 (the default)
+# ---------------------------------------------------------------------------
+
+def test_action_items_tab_is_index_zero(panel_with_emails):
+    from PyQt6.QtWidgets import QTabWidget
+    tabs = panel_with_emails.widget().findChildren(QTabWidget, "email_tabs")[0]
+    assert tabs.currentIndex() == 0
+    assert "Action" in tabs.tabText(0)
+
+
+# ---------------------------------------------------------------------------
+# Slice 17 — Inbox tab is index 1
+# ---------------------------------------------------------------------------
+
+def test_inbox_tab_is_index_one(panel_with_emails):
+    from PyQt6.QtWidgets import QTabWidget
+    tabs = panel_with_emails.widget().findChildren(QTabWidget, "email_tabs")[0]
+    assert "Inbox" in tabs.tabText(1)
+
+
+# ---------------------------------------------------------------------------
+# Slice 19 — sync_done refreshes the action items list
+# ---------------------------------------------------------------------------
+
+def test_sync_done_populates_action_items(qapp, monkeypatch):
+    store = EmailStore(":memory:")
+    monkeypatch.setattr(type(store), "has_credentials", property(lambda self: True))
+    store.insert_email(
+        "uid-1", "Please review the budget", "x@example.com", "2026-05-10",
+        "Please review the attached budget report."
+    )
+    panel = EmailPanel(store)
+    panel._on_sync_done(1, "")
+    panel._action_item_worker.wait()
+    qapp.processEvents()
+    assert panel._action_items_list.count() >= 1
+    store.close()
+
+
+def test_sync_done_with_error_does_not_refresh_action_items(qapp, monkeypatch):
+    store = EmailStore(":memory:")
+    monkeypatch.setattr(type(store), "has_credentials", property(lambda self: True))
+    panel = EmailPanel(store)
+    panel._on_sync_done(0, "Connection refused")
+    assert panel._action_items_list.count() == 0
+    store.close()
+
+
+# ---------------------------------------------------------------------------
+# Slice 20 — action item row contains task text
+# ---------------------------------------------------------------------------
+
+def test_action_item_row_contains_task_text(qapp, monkeypatch):
+    store = EmailStore(":memory:")
+    monkeypatch.setattr(type(store), "has_credentials", property(lambda self: True))
+    store.insert_email(
+        "uid-1", "Please review Q1", "x@example.com", "2026-05-10",
+        "Please review this report."
+    )
+    panel = EmailPanel(store)
+    panel._on_sync_done(1, "")
+    panel._action_item_worker.wait()
+    qapp.processEvents()
+    texts = [panel._action_items_list.item(i).text()
+             for i in range(panel._action_items_list.count())]
+    assert any("review" in t.lower() for t in texts)
+    store.close()
+
+
+# ---------------------------------------------------------------------------
+# Slice 21 — action item row contains source subject and sender
+# ---------------------------------------------------------------------------
+
+def test_action_item_row_contains_subject_and_sender(qapp, monkeypatch):
+    store = EmailStore(":memory:")
+    monkeypatch.setattr(type(store), "has_credentials", property(lambda self: True))
+    store.insert_email(
+        "uid-1", "Please review Q1", "alice@example.com", "2026-05-10",
+        "Please review this report."
+    )
+    panel = EmailPanel(store)
+    panel._on_sync_done(1, "")
+    panel._action_item_worker.wait()
+    qapp.processEvents()
+    texts = [panel._action_items_list.item(i).text()
+             for i in range(panel._action_items_list.count())]
+    assert any("alice@example.com" in t for t in texts)
+    assert any("Please review Q1" in t for t in texts)
+    store.close()
+
+
+# ---------------------------------------------------------------------------
+# Slice 22 — action items sorted by priority desc, None-priority last
+# ---------------------------------------------------------------------------
+
+def test_action_items_sorted_by_priority_desc_none_last(qapp, monkeypatch):
+    from cbosa.core.task import Task
+    store = EmailStore(":memory:")
+    monkeypatch.setattr(type(store), "has_credentials", property(lambda self: True))
+    id1 = store.insert_email("u1", "Sub1", "a@b.com", "2026-01-01", "body1")
+    id2 = store.insert_email("u2", "Sub2", "a@b.com", "2026-01-01", "body2")
+    id3 = store.insert_email("u3", "Sub3", "a@b.com", "2026-01-01", "body3")
+    panel = EmailPanel(store)
+    tasks = [
+        Task("Low task", "email", str(id1), priority=None),
+        Task("High task", "email", str(id2), priority=10),
+        Task("Mid task", "email", str(id3), priority=5),
+    ]
+    panel._populate_action_items(tasks)
+    texts = [panel._action_items_list.item(i).text()
+             for i in range(panel._action_items_list.count())]
+    assert "High task" in texts[0]
+    assert "Mid task" in texts[1]
+    assert "Low task" in texts[2]
+    store.close()
+
+
+# ---------------------------------------------------------------------------
+# Slice 23 — NullAIService falls back to rule-based TaskExtractor
+# ---------------------------------------------------------------------------
+
+def test_null_ai_service_falls_back_to_task_extractor(qapp, monkeypatch):
+    from cbosa.ai.service import NullAIService
+    store = EmailStore(":memory:")
+    monkeypatch.setattr(type(store), "has_credentials", property(lambda self: True))
+    store.insert_email(
+        "uid-1", "Please review Q1", "x@example.com", "2026-05-10",
+        "Please review this report by Friday."
+    )
+    panel = EmailPanel(store, ai_service=NullAIService())
+    panel._on_sync_done(1, "")
+    panel._action_item_worker.wait()
+    qapp.processEvents()
+    assert panel._action_items_list.count() >= 1
+    store.close()
+
+
+# ---------------------------------------------------------------------------
+# Slice 24 — extracted tasks have source="email" and correct source_id
+# ---------------------------------------------------------------------------
+
+def test_extracted_tasks_have_correct_source_and_id(qapp, monkeypatch):
+    from cbosa.ai.service import NullAIService
+    store = EmailStore(":memory:")
+    monkeypatch.setattr(type(store), "has_credentials", property(lambda self: True))
+    email_id = store.insert_email(
+        "uid-1", "Please review Q1", "x@example.com", "2026-05-10",
+        "Please review this report."
+    )
+    panel = EmailPanel(store, ai_service=NullAIService())
+    em = store.get_email(email_id)
+    tasks = panel._extract_tasks_for_email(em)
+    assert all(t.source == "email" for t in tasks)
+    assert all(t.source_id == str(email_id) for t in tasks)
+    store.close()
+
+
+# ---------------------------------------------------------------------------
+# Slice 25 — TaskExtractor is still importable (not deleted)
+# ---------------------------------------------------------------------------
+
+def test_task_extractor_still_importable():
+    from cbosa.core.task_extractor import TaskExtractor
+    extractor = TaskExtractor()
+    assert callable(extractor.extract_tasks)

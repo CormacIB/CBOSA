@@ -30,6 +30,10 @@ class AIService(ABC):
         """Return a list of action-item strings extracted from *text*, or []."""
 
     @abstractmethod
+    def key_points(self, text: str) -> list[str]:
+        """Return a list of key takeaway strings extracted from *text*, or []."""
+
+    @abstractmethod
     def answer(self, query: str, context: list[str]) -> str:
         """Answer *query* given *context* snippets, or '' if unavailable."""
 
@@ -51,6 +55,9 @@ class NullAIService(AIService):
         return []
 
     def extract_tasks(self, text: str) -> list[str]:
+        return []
+
+    def key_points(self, text: str) -> list[str]:
         return []
 
     def answer(self, query: str, context: list[str]) -> str:

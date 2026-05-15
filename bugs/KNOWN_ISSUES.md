@@ -4,6 +4,10 @@ Issues discovered during development that are not yet resolved. Each entry notes
 
 ---
 
+Capture system (youtube) only captures titles? Doesn't capture actual content of youtube media
+
+Seems like a pdf seems to crash the system
+
 ## KI-1: No filesystem watcher on note indexes
 
 **Area:** Issue #3 — Note Engine (`LinkIndex`, `TagIndex`, `SearchIndex`)

@@ -12,6 +12,7 @@ from cbosa.core.link_index import LinkIndex
 from cbosa.core.note_store import NoteStore, DuplicateNoteError
 from cbosa.core.search_index import SearchIndex
 from cbosa.core.tag_index import TagIndex
+from cbosa.ai.service import NullAIService
 from cbosa.ui.panels import BasePanel
 from cbosa.ui.panels.note_browser import NoteBrowserPanel
 from cbosa.ui.panels.note_editor import NoteEditorPanel, _render_markdown
@@ -524,3 +525,149 @@ class TestNoteBrowserPanelRename:
         link_index.rebuild()
         panel.rename_note("alpha", "beta")
         assert store.read("unrelated").content == "just text here"
+
+
+# ---------------------------------------------------------------------------
+# Issue #22 — Note Editor AI toolbar + AIWorker
+# ---------------------------------------------------------------------------
+
+
+class _SummaryAI(NullAIService):
+    """Fake AIService that returns predictable values for testing."""
+
+    def summarize(self, text: str) -> str:
+        return "AI summary result"
+
+    def find_connections(self, note_id: str, all_notes: list) -> list[str]:
+        return ["related-note-a", "related-note-b"]
+
+
+class TestNoteEditorPanelAIToolbar:
+    # --- toolbar buttons exist and are disabled when no note is open ---
+
+    def test_summarize_button_exists(self, qapp, store, link_index):
+        panel = NoteEditorPanel(store, link_index)
+        assert panel._summarize_btn is not None
+
+    def test_find_connections_button_exists(self, qapp, store, link_index):
+        panel = NoteEditorPanel(store, link_index)
+        assert panel._connections_btn is not None
+
+    def test_ai_buttons_disabled_when_no_note_open(self, qapp, store, link_index):
+        panel = NoteEditorPanel(store, link_index)
+        assert not panel._summarize_btn.isEnabled()
+        assert not panel._connections_btn.isEnabled()
+
+    def test_ai_buttons_enabled_when_note_opened(self, qapp, store, link_index):
+        store.create("my-note", "content")
+        panel = NoteEditorPanel(store, link_index)
+        panel.open_note("my-note")
+        assert panel._summarize_btn.isEnabled()
+        assert panel._connections_btn.isEnabled()
+
+    # --- output pane hidden on init ---
+
+    def test_output_pane_hidden_on_init(self, qapp, store, link_index):
+        panel = NoteEditorPanel(store, link_index)
+        assert panel._output_pane.isHidden()
+
+    def test_label_row_hidden_on_init(self, qapp, store, link_index):
+        panel = NoteEditorPanel(store, link_index)
+        assert panel._label_row.isHidden()
+
+    # --- summarize shows Thinking… then result ---
+
+    def test_summarize_shows_thinking_immediately(self, qapp, store, link_index):
+        store.create("my-note", "some text")
+        panel = NoteEditorPanel(store, link_index, ai_service=_SummaryAI())
+        panel.open_note("my-note")
+        panel._on_summarize()
+        # "Thinking…" is set synchronously before the worker thread runs
+        assert "Thinking" in panel._output_pane.toPlainText()
+        assert not panel._output_pane.isHidden()
+        if panel._worker:
+            panel._worker.wait()
+
+    def test_summarize_makes_output_pane_visible(self, qapp, store, link_index):
+        from PyQt6.QtWidgets import QApplication
+        store.create("my-note", "some text")
+        panel = NoteEditorPanel(store, link_index, ai_service=_SummaryAI())
+        panel.open_note("my-note")
+        panel._on_summarize()
+        if panel._worker:
+            panel._worker.wait()
+        QApplication.processEvents()
+        assert not panel._output_pane.isHidden()
+
+    def test_summarize_updates_pane_with_ai_result(self, qapp, store, link_index):
+        from PyQt6.QtWidgets import QApplication
+        store.create("my-note", "some text")
+        panel = NoteEditorPanel(store, link_index, ai_service=_SummaryAI())
+        panel.open_note("my-note")
+        panel._on_summarize()
+        if panel._worker:
+            panel._worker.wait()
+        QApplication.processEvents()
+        assert "AI summary result" in panel._output_pane.toPlainText()
+
+    def test_summarize_sets_label_to_summary(self, qapp, store, link_index):
+        store.create("my-note", "some text")
+        panel = NoteEditorPanel(store, link_index, ai_service=_SummaryAI())
+        panel.open_note("my-note")
+        panel._on_summarize()
+        assert panel._call_type_label.text() == "Summary"
+        if panel._worker:
+            panel._worker.wait()
+
+    # --- find connections ---
+
+    def test_find_connections_sets_label_to_connections(self, qapp, store, link_index):
+        store.create("my-note", "some text")
+        panel = NoteEditorPanel(store, link_index, ai_service=_SummaryAI())
+        panel.open_note("my-note")
+        panel._on_find_connections()
+        assert panel._call_type_label.text() == "Connections"
+        if panel._worker:
+            panel._worker.wait()
+
+    def test_find_connections_updates_pane_with_result(self, qapp, store, link_index):
+        from PyQt6.QtWidgets import QApplication
+        store.create("my-note", "some text")
+        panel = NoteEditorPanel(store, link_index, ai_service=_SummaryAI())
+        panel.open_note("my-note")
+        panel._on_find_connections()
+        if panel._worker:
+            panel._worker.wait()
+        QApplication.processEvents()
+        text = panel._output_pane.toPlainText()
+        assert "related-note-a" in text
+
+    # --- dismiss button ---
+
+    def test_dismiss_hides_output_pane(self, qapp, store, link_index):
+        store.create("my-note", "some text")
+        panel = NoteEditorPanel(store, link_index, ai_service=_SummaryAI())
+        panel.open_note("my-note")
+        panel._on_summarize()
+        if panel._worker:
+            panel._worker.wait()
+        panel._dismiss_output()
+        assert panel._output_pane.isHidden()
+        assert panel._label_row.isHidden()
+
+    # --- opening a different note hides the output pane ---
+
+    def test_open_note_hides_output_pane(self, qapp, store, link_index):
+        from PyQt6.QtWidgets import QApplication
+        store.create("note-a", "content a")
+        store.create("note-b", "content b")
+        panel = NoteEditorPanel(store, link_index, ai_service=_SummaryAI())
+        panel.open_note("note-a")
+        panel._on_summarize()
+        if panel._worker:
+            panel._worker.wait()
+        QApplication.processEvents()
+        # now open a different note — pane should hide
+        panel.open_note("note-b")
+        assert panel._output_pane.isHidden()
+        assert panel._label_row.isHidden()

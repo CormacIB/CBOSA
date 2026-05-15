@@ -1,19 +1,10 @@
 """
 EmailPanel — dockable panel for IMAP email + task extraction.
 
-Layout when credentials are present:
-  ┌──────────────────────────────────────────────────┐
-  │  Search: [_________________________] [Search]    │
-  ├────────────────────┬─────────────────────────────┤
-  │  Inbox list        │  Message reader              │
-  │  (QListWidget)     │  (QTextEdit, read-only)      │
-  │  Subject           │                              │
-  │  From / Date       ├─────────────────────────────┤
-  │                    │  Extracted Tasks             │
-  │                    │  (QListWidget)               │
-  ├────────────────────┴─────────────────────────────┤
-  │  [Sync]   Status: Ready                          │
-  └──────────────────────────────────────────────────┘
+Layout (credentials present):
+  QTabWidget
+    Tab 0: Action Items — Task list populated after each sync (AI or rule-based)
+    Tab 1: Inbox — search / list / reader / sync UI (unchanged behaviour)
 
 When credentials are missing, shows a setup prompt instead.
 """
@@ -21,7 +12,7 @@ from __future__ import annotations
 
 import re
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -30,12 +21,14 @@ from PyQt6.QtWidgets import (
     QListWidgetItem,
     QPushButton,
     QSplitter,
+    QTabWidget,
     QTextEdit,
     QVBoxLayout,
     QWidget,
 )
 
 from cbosa.ai.service import AIService, NullAIService
+from cbosa.core.task import Task
 from cbosa.core.task_extractor import TaskExtractor
 from cbosa.modules.email_store import EmailStore
 from cbosa.ui.panels import BasePanel
@@ -44,7 +37,7 @@ _ROLE_EMAIL_ID = Qt.ItemDataRole.UserRole
 
 
 class EmailPanel(BasePanel):
-    """Email inbox panel — list, reader, and extracted task sidebar."""
+    """Email inbox panel — Action Items and Inbox tabs."""
 
     def __init__(
         self,
@@ -72,7 +65,7 @@ class EmailPanel(BasePanel):
         if not self._store.has_credentials:
             self._build_no_credentials_ui(root_layout)
         else:
-            self._build_inbox_ui(root_layout)
+            self._build_tabbed_ui(root_layout)
 
         self.setWidget(root)
 
@@ -94,8 +87,31 @@ class EmailPanel(BasePanel):
         layout.addWidget(prompt)
         layout.addStretch()
 
-    def _build_inbox_ui(self, layout: QVBoxLayout) -> None:
-        """Build the full inbox / reader / tasks UI."""
+    def _build_tabbed_ui(self, layout: QVBoxLayout) -> None:
+        """Build the QTabWidget with Action Items (0) and Inbox (1) tabs."""
+        self._tabs = QTabWidget()
+        self._tabs.setObjectName("email_tabs")
+        self._tabs.addTab(self._build_action_items_tab(), "Action Items")
+        self._tabs.addTab(self._build_inbox_tab(), "Inbox")
+        layout.addWidget(self._tabs)
+
+    def _build_action_items_tab(self) -> QWidget:
+        widget = QWidget()
+        vbox = QVBoxLayout(widget)
+        vbox.setContentsMargins(4, 4, 4, 4)
+        vbox.setSpacing(4)
+        self._action_items_list = QListWidget()
+        self._action_items_list.setObjectName("action_items_list")
+        vbox.addWidget(self._action_items_list)
+        return widget
+
+    def _build_inbox_tab(self) -> QWidget:
+        """Build the Inbox tab — existing search/list/reader/sync UI, unchanged."""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(6)
+
         # ---- Search bar ----
         search_bar = QHBoxLayout()
         search_bar.addWidget(QLabel("Search:"))
@@ -110,7 +126,7 @@ class EmailPanel(BasePanel):
         search_bar.addWidget(self._search_btn)
         layout.addLayout(search_bar)
 
-        # ---- Main splitter: inbox | reader+tasks ----
+        # ---- Main splitter: inbox list | message reader ----
         main_splitter = QSplitter(Qt.Orientation.Horizontal)
 
         self._inbox_list = QListWidget()
@@ -118,38 +134,16 @@ class EmailPanel(BasePanel):
         self._inbox_list.currentItemChanged.connect(self._on_email_selected)
         main_splitter.addWidget(self._inbox_list)
 
-        # Right pane: reader on top, tasks on bottom
-        right_pane = QWidget()
-        right_layout = QVBoxLayout(right_pane)
-        right_layout.setContentsMargins(0, 0, 0, 0)
-        right_layout.setSpacing(4)
-
-        right_splitter = QSplitter(Qt.Orientation.Vertical)
-
         self._message_reader = QTextEdit()
         self._message_reader.setObjectName("message_reader")
         self._message_reader.setReadOnly(True)
-        right_splitter.addWidget(self._message_reader)
-
-        tasks_widget = QWidget()
-        tasks_layout = QVBoxLayout(tasks_widget)
-        tasks_layout.setContentsMargins(0, 0, 0, 0)
-        tasks_layout.addWidget(QLabel("<b>Extracted Tasks</b>"))
-        self._tasks_list = QListWidget()
-        self._tasks_list.setObjectName("tasks_list")
-        tasks_layout.addWidget(self._tasks_list)
-        right_splitter.addWidget(tasks_widget)
-
-        right_splitter.setStretchFactor(0, 2)
-        right_splitter.setStretchFactor(1, 1)
-        right_layout.addWidget(right_splitter)
-        main_splitter.addWidget(right_pane)
+        main_splitter.addWidget(self._message_reader)
 
         main_splitter.setStretchFactor(0, 1)
         main_splitter.setStretchFactor(1, 2)
         layout.addWidget(main_splitter)
 
-        # ---- Bottom bar: sync + clear buttons + status ----
+        # ---- Bottom bar: sync + clear + status ----
         bottom_bar = QHBoxLayout()
         self._sync_btn = QPushButton("Sync")
         self._sync_btn.setObjectName("sync_btn")
@@ -165,11 +159,11 @@ class EmailPanel(BasePanel):
         bottom_bar.addStretch()
         layout.addLayout(bottom_bar)
 
-        # Load from cache on open
         self._refresh_inbox()
+        return widget
 
     # ------------------------------------------------------------------
-    # Data / refresh
+    # Data / refresh — inbox
     # ------------------------------------------------------------------
 
     def _refresh_inbox(
@@ -189,6 +183,62 @@ class EmailPanel(BasePanel):
             self._inbox_list.addItem(item)
 
     # ------------------------------------------------------------------
+    # Data / refresh — action items
+    # ------------------------------------------------------------------
+
+    def _extract_tasks_for_email(self, em: dict) -> list[Task]:
+        """Return Task instances extracted from a single email dict.
+
+        Uses AIService if it returns results; otherwise falls back to
+        the rule-based TaskExtractor. Both paths produce Tasks with
+        source="email" and source_id set to the email's row id.
+        """
+        text = em["subject"] + "\n" + em["body"]
+        source_id = str(em["id"])
+
+        raw = self._ai.extract_tasks(text)
+        if not raw:
+            raw = self._extractor.extract_tasks(text)
+
+        return [
+            Task(text=t, source="email", source_id=source_id, priority=None)
+            for t in raw
+        ]
+
+    def _refresh_action_items(self) -> None:
+        """Start background extraction of tasks from all stored emails."""
+        self._action_item_worker = _ActionItemWorker(
+            self._store, self._extractor, self._ai
+        )
+        self._action_item_worker.finished.connect(
+            self._populate_action_items, Qt.ConnectionType.QueuedConnection
+        )
+        self._action_item_worker.start()
+
+    def _populate_action_items(self, tasks: list[Task]) -> None:
+        """Sort tasks by priority descending (None last) and fill the list.
+
+        Each row: task text on line 1, subject | sender [| Due: …] on line 2.
+        """
+        sorted_tasks = sorted(
+            tasks,
+            key=lambda t: (t.priority is None, -(t.priority or 0)),
+        )
+
+        self._action_items_list.clear()
+        for task in sorted_tasks:
+            em = self._store.get_email(int(task.source_id))
+            if em:
+                due_part = f" | Due: {task.due_date}" if task.due_date else ""
+                line2 = f"{em['subject']} | {em['sender']}{due_part}"
+            else:
+                due_part = f"Due: {task.due_date}" if task.due_date else ""
+                line2 = due_part
+            self._action_items_list.addItem(
+                QListWidgetItem(f"{task.text}\n{line2}")
+            )
+
+    # ------------------------------------------------------------------
     # Slot handlers
     # ------------------------------------------------------------------
 
@@ -197,7 +247,6 @@ class EmailPanel(BasePanel):
     ) -> None:
         if current is None:
             self._message_reader.clear()
-            self._tasks_list.clear()
             return
         email_id = current.data(_ROLE_EMAIL_ID)
         em = self._store.get_email(email_id)
@@ -209,10 +258,6 @@ class EmailPanel(BasePanel):
             f"Date:    {em['date']}\n"
             f"\n{em['body']}"
         )
-        tasks = self._extractor.extract_tasks(em["subject"] + "\n" + em["body"])
-        self._tasks_list.clear()
-        for task in tasks:
-            self._tasks_list.addItem(QListWidgetItem(task))
 
     def _on_search(self) -> None:
         query = self._search_edit.text().strip()
@@ -229,8 +274,8 @@ class EmailPanel(BasePanel):
     def _on_clear(self) -> None:
         self._store.clear()
         self._message_reader.clear()
-        self._tasks_list.clear()
         self._refresh_inbox()
+        self._refresh_action_items()
         self._status_label.setText("Inbox cleared")
 
     def _on_sync(self) -> None:
@@ -243,5 +288,40 @@ class EmailPanel(BasePanel):
         if error:
             self._status_label.setText(f"Error: {error}")
         else:
-            self._status_label.setText(f"Synced {count} new email(s)")
+            self._status_label.setText(f"Synced {count} new email(s) — extracting tasks…")
             self._refresh_inbox()
+            self._refresh_action_items()
+
+
+# ---------------------------------------------------------------------------
+# Background worker — task extraction
+# ---------------------------------------------------------------------------
+
+class _ActionItemWorker(QThread):
+    """Extracts tasks from all stored emails in a background thread.
+
+    Emits finished(list[Task]) when done; connect with QueuedConnection
+    so _populate_action_items runs on the main thread.
+    """
+
+    finished = pyqtSignal(list)
+
+    def __init__(self, store, extractor, ai_service, parent=None) -> None:
+        super().__init__(parent)
+        self._store = store
+        self._extractor = extractor
+        self._ai = ai_service
+
+    def run(self) -> None:
+        all_tasks: list[Task] = []
+        for em in self._store.list_emails():
+            text = em["subject"] + "\n" + em["body"]
+            source_id = str(em["id"])
+            raw = self._ai.extract_tasks(text)
+            if not raw:
+                raw = self._extractor.extract_tasks(text)
+            for t in raw:
+                all_tasks.append(
+                    Task(text=t, source="email", source_id=source_id, priority=None)
+                )
+        self.finished.emit(all_tasks)

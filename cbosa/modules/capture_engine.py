@@ -58,10 +58,93 @@ def _default_ydl_extract(url: str) -> dict:
             return {
                 "title": info.get("title", ""),
                 "description": info.get("description", ""),
-                "transcript": "",
+                "transcript": _extract_transcript_from_info(info),
             }
+    except CaptureFetchError:
+        raise
     except Exception as exc:
         raise CaptureFetchError(f"yt-dlp extraction failed: {exc}") from exc
+
+
+def _extract_transcript_from_info(info: dict) -> str:
+    """
+    Fetch subtitle text from URLs embedded in a yt-dlp info dict.
+
+    Prefers manual subtitles over auto-captions; tries English variants first.
+    Returns '' when no subtitles are available or fetching fails.
+    """
+    try:
+        import httpx as _httpx  # type: ignore[import]
+    except ImportError:
+        return ""
+
+    _PREFERRED_LANGS = ("en", "en-US", "en-GB", "en-orig")
+    _PARSEABLE_EXTS = ("json3", "vtt", "srv3")
+
+    for caption_source in (info.get("subtitles", {}), info.get("automatic_captions", {})):
+        for lang in _PREFERRED_LANGS:
+            for track in caption_source.get(lang, []):
+                ext = track.get("ext", "")
+                sub_url = track.get("url", "")
+                if not sub_url or ext not in _PARSEABLE_EXTS:
+                    continue
+                try:
+                    resp = _httpx.get(sub_url, timeout=15.0, follow_redirects=True)
+                    if resp.status_code != 200:
+                        continue
+                    text = (
+                        _parse_json3_subtitles(resp.text)
+                        if ext == "json3"
+                        else _parse_vtt_subtitles(resp.text)
+                    )
+                    if text:
+                        return text
+                except Exception:
+                    continue
+    return ""
+
+
+def _parse_vtt_subtitles(vtt_text: str) -> str:
+    """Extract plain text from a WebVTT subtitle string."""
+    import re
+
+    text_lines: list[str] = []
+    for line in vtt_text.splitlines():
+        if not line.strip():
+            continue
+        if line.startswith("WEBVTT") or "-->" in line:
+            continue
+        if line.startswith(("NOTE", "STYLE", "REGION")):
+            continue
+        clean = re.sub(r"<[^>]+>", "", line).strip()
+        if clean:
+            text_lines.append(clean)
+    # Deduplicate consecutive identical lines (common in auto-captions)
+    deduped: list[str] = []
+    prev: str | None = None
+    for line in text_lines:
+        if line != prev:
+            deduped.append(line)
+            prev = line
+    return " ".join(deduped)
+
+
+def _parse_json3_subtitles(json_text: str) -> str:
+    """Extract plain text from a YouTube json3 subtitle string."""
+    import json
+    import re
+
+    try:
+        data = json.loads(json_text)
+    except Exception:
+        return ""
+    parts: list[str] = []
+    for event in data.get("events", []):
+        for seg in event.get("segs", []):
+            text = seg.get("utf8", "")
+            if text and text != "\n":
+                parts.append(text)
+    return re.sub(r"\s+", " ", " ".join(parts)).strip()
 
 
 def _default_pdf_text(path) -> str:
@@ -189,14 +272,26 @@ class CaptureEngine:
             if safe_title
             else f"capture_{result.capture_date}"
         )
-        frontmatter = {
+        # For YouTube captures, prepend an AI-generated key-points section
+        body = result.content
+        key_points: list[str] = []
+        if result.capture_type == "youtube":
+            key_points = self._ai.key_points(result.content)
+            if key_points:
+                kp_lines = "\n".join(f"- {p}" for p in key_points)
+                body = f"## Key Points\n\n{kp_lines}\n\n{body}"
+
+        frontmatter: dict = {
             "title": result.title,
             "source": result.source,
             "capture_date": result.capture_date,
             "capture_type": result.capture_type,
             "summary": self._ai.summarize(result.content),
         }
-        store.create(note_name, result.content, frontmatter)
+        if key_points:
+            frontmatter["key_points"] = key_points
+
+        store.create(note_name, body, frontmatter)
         return note_name
 
     def find_related(self, content: str, note_store: NoteStore) -> list[str]:
@@ -253,11 +348,10 @@ class CaptureEngine:
         title = data.get("title", "")
         description = data.get("description", "")
         transcript = data.get("transcript", "")
-        content = (
-            f"{description}\n\n## Transcript\n\n{transcript}"
-            if transcript
-            else description
-        )
+        if transcript:
+            content = f"## Description\n\n{description}\n\n## Transcript\n\n{transcript}"
+        else:
+            content = description
         return CaptureResult(
             source=url,
             title=title,

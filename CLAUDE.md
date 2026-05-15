@@ -81,6 +81,8 @@ GitHub repo: CormacIB/CBOSA
 | 19 | Theme PyQtAds panel chrome via ThemeEngine QSS | Done |
 | 20 | Task dataclass (shared core) | Done |
 | 21 | OllamaAIService + [ai] config + availability warning | Done |
+| 22 | Note Editor AI toolbar + AIWorker | Done |
+| 23 | Email panel redesign — Action Items tab + AI task extraction | Done |
 
 ---
 

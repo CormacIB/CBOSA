@@ -24,9 +24,18 @@ from PyQt6.QtGui import (
     QTextCharFormat,
     QTextCursor,
 )
-from PyQt6.QtWidgets import QPlainTextEdit, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import (
+    QHBoxLayout,
+    QLabel,
+    QPlainTextEdit,
+    QPushButton,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
 
 from cbosa.ai.service import AIService, NullAIService
+from cbosa.ai.worker import AIWorker
 from cbosa.core.link_index import LinkIndex
 from cbosa.core.note_store import NoteNotFoundError, NoteStore
 from cbosa.ui.panels import BasePanel
@@ -145,15 +154,47 @@ class NoteEditorPanel(BasePanel):
         self._daily_store = daily_store
         self._ai = ai_service or NullAIService()
         self._current_note: str | None = None
+        self._worker: AIWorker | None = None
 
         container = QWidget()
         layout = QVBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
 
+        # AI toolbar
+        toolbar = QWidget()
+        toolbar_layout = QHBoxLayout(toolbar)
+        toolbar_layout.setContentsMargins(4, 2, 4, 2)
+        self._summarize_btn = QPushButton("Summarize")
+        self._summarize_btn.setEnabled(False)
+        self._connections_btn = QPushButton("Find Connections")
+        self._connections_btn.setEnabled(False)
+        toolbar_layout.addWidget(self._summarize_btn)
+        toolbar_layout.addWidget(self._connections_btn)
+        toolbar_layout.addStretch()
+        layout.addWidget(toolbar)
+
         self._editor = _WikiEditor()
         self._editor.setPlaceholderText("Open a note to edit…")
         self._editor.link_clicked.connect(self.note_link_activated)
         layout.addWidget(self._editor)
+
+        # Label row (hidden until an AI action is triggered)
+        self._label_row = QWidget()
+        label_row_layout = QHBoxLayout(self._label_row)
+        label_row_layout.setContentsMargins(4, 2, 4, 2)
+        self._call_type_label = QLabel("")
+        self._dismiss_btn = QPushButton("×")
+        label_row_layout.addWidget(self._call_type_label)
+        label_row_layout.addStretch()
+        label_row_layout.addWidget(self._dismiss_btn)
+        self._label_row.setVisible(False)
+        layout.addWidget(self._label_row)
+
+        # Output pane (hidden until an AI action is triggered)
+        self._output_pane = QTextEdit()
+        self._output_pane.setReadOnly(True)
+        self._output_pane.setVisible(False)
+        layout.addWidget(self._output_pane)
 
         self.setWidget(container)
 
@@ -162,6 +203,13 @@ class NoteEditorPanel(BasePanel):
 
         save_shortcut = QShortcut(QKeySequence("Ctrl+S"), self)
         save_shortcut.activated.connect(self.save)
+
+        self._summarize_btn.clicked.connect(self._on_summarize)
+        self._connections_btn.clicked.connect(self._on_find_connections)
+        self._dismiss_btn.clicked.connect(self._dismiss_output)
+
+        summarize_shortcut = QShortcut(QKeySequence("Ctrl+Shift+S"), self)
+        summarize_shortcut.activated.connect(self._on_summarize)
 
     # ------------------------------------------------------------------
     # Public
@@ -181,6 +229,9 @@ class NoteEditorPanel(BasePanel):
         self._editor.blockSignals(True)
         self._editor.setPlainText(note.content)
         self._editor.blockSignals(False)
+        self._summarize_btn.setEnabled(True)
+        self._connections_btn.setEnabled(True)
+        self._dismiss_output()
 
     def save(self) -> None:
         if self._current_note is None:
@@ -239,4 +290,56 @@ class NoteEditorPanel(BasePanel):
             if m.start() <= p1 <= m.end() and m.start() <= p2 <= m.end():
                 return True
         return False
+
+    # ------------------------------------------------------------------
+    # AI toolbar actions
+    # ------------------------------------------------------------------
+
+    def _on_summarize(self) -> None:
+        if self._current_note is None:
+            return
+        store, bare_name = self._resolve(self._current_note)
+        try:
+            note = store.read(bare_name)
+        except NoteNotFoundError:
+            return
+        text = note.content
+        self._show_output("Summary")
+        self._start_worker(lambda: self._ai.summarize(text))
+
+    def _on_find_connections(self) -> None:
+        if self._current_note is None:
+            return
+        note_name = self._current_note
+        all_notes = []
+        for name in self._store.all_names():
+            try:
+                note = self._store.read(name)
+                words = note.content.split()
+                snippet = " ".join(words[:50])
+            except Exception:
+                snippet = ""
+            all_notes.append((name, snippet))
+        self._show_output("Connections")
+        self._start_worker(
+            lambda: "\n".join(self._ai.find_connections(note_name, all_notes))
+        )
+
+    def _show_output(self, call_type: str) -> None:
+        self._call_type_label.setText(call_type)
+        self._output_pane.setPlainText("Thinking…")
+        self._label_row.setVisible(True)
+        self._output_pane.setVisible(True)
+
+    def _dismiss_output(self) -> None:
+        self._label_row.setVisible(False)
+        self._output_pane.setVisible(False)
+
+    def _start_worker(self, fn) -> None:
+        self._worker = AIWorker(fn)
+        self._worker.result_ready.connect(self._output_pane.setPlainText)
+        self._worker.error.connect(
+            lambda msg: self._output_pane.setPlainText(f"Error: {msg}")
+        )
+        self._worker.start()
 
