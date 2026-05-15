@@ -9,7 +9,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent
 
 _DEFAULT_CONFIG = {
-    "theme": "themes/dark_default.toml",
+    "theme": "themes/obsidian_dark.toml",
     "data_dir": "data",
     "ai": {
         "backend": "null",
@@ -45,6 +45,40 @@ def resolve(key: str, default: "str | None" = None) -> Path:
         raise KeyError(key)
     p = Path(value)
     return p if p.is_absolute() else PROJECT_ROOT / p
+
+
+def save_theme(path: str) -> None:
+    """Persist the active theme path to cbosa.toml and update the in-memory config."""
+    global _config
+    _config["theme"] = path
+    config_path = PROJECT_ROOT / "cbosa.toml"
+    if config_path.exists():
+        with open(config_path, "r", encoding="utf-8") as f:
+            data = toml.load(f)
+    else:
+        data = {}
+    data["theme"] = path
+    with open(config_path, "w", encoding="utf-8") as f:
+        toml.dump(data, f)
+
+
+def save_finance_budget(monthly_budget: float) -> None:
+    """Persist monthly budget to cbosa.toml under [finance] and update in-memory config."""
+    global _config
+    if "finance" not in _config:
+        _config["finance"] = {}
+    _config["finance"]["monthly_budget"] = monthly_budget
+    config_path = PROJECT_ROOT / "cbosa.toml"
+    if config_path.exists():
+        with open(config_path, "r", encoding="utf-8") as f:
+            data = toml.load(f)
+    else:
+        data = {}
+    if "finance" not in data:
+        data["finance"] = {}
+    data["finance"]["monthly_budget"] = monthly_budget
+    with open(config_path, "w", encoding="utf-8") as f:
+        toml.dump(data, f)
 
 
 # Load defaults immediately on import so callers never get an empty config.

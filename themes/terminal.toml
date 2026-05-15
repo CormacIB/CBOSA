@@ -1,0 +1,21 @@
+# CBOSA Terminal Theme — Phosphor Green
+# Text is green. Accent (links, active items, headings) is amber.
+
+[colors]
+background = "#000000"
+surface    = "#050a06"
+primary    = "#0a140c"
+accent     = "#ffb000"
+text       = "#33ff66"
+text_muted = "#1a8033"
+text_faint = "#0e4d1d"
+border     = "#1a3a22"
+link       = "#ffb000"
+heading    = "#ffb000"
+code_bg    = "#0a140c"
+
+[fonts]
+family       = "Consolas"
+size_base    = 13
+size_small   = 11
+size_heading = 18

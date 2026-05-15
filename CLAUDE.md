@@ -18,17 +18,21 @@ cbosa/
     main_window.py    # MainWindow (QMainWindow) — hosts CDockManager as central widget
     command_palette.py# Ctrl+P overlay for adding panels
     theme_engine.py   # Reads TOML → generates QSS → applies to QApplication
+    banner.py           # App banner widget
     panels/
       __init__.py     # PanelRegistry, BasePanel
       note_browser.py # NoteBrowserPanel — folder tree + tag filter
       note_editor.py  # NoteEditorPanel — QPlainTextEdit + QWebEngineView preview
+      finance_summary_panel.py  # FinanceSummaryPanel — QPainter bar chart (category × cost)
+      task_panel.py   # TaskPanel — task list view
   core/
     note_store.py     # NoteStore — CRUD on .md files with YAML frontmatter
     link_index.py     # LinkIndex — bidirectional [[wikilink]] map
     tag_index.py      # TagIndex — #tag → notes map
     search_index.py   # SearchIndex — SQLite FTS5 full-text search
+    task_store.py     # TaskStore — task persistence
   ai/                 # AIService ABC + NullAIService (stub, no-op)
-  modules/            # Future: Finance, Email, Canvas
+  modules/            # Future: Email, Canvas
 tests/
   conftest.py
   test_note_engine.py
@@ -57,7 +61,7 @@ data/
 
 ---
 
-## Issue status (as of 2026-05-14)
+## Issue status (as of 2026-05-15)
 
 GitHub repo: CormacIB/CBOSA
 

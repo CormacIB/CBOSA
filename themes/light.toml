@@ -1,16 +1,20 @@
-﻿# CBOSA Light Theme
+# CBOSA Light Theme
 
 [colors]
-background = "#f8f8f2"
-surface    = "#eeeeee"
-primary    = "#6272a4"
-accent     = "#ff79c6"
-text       = "#282a36"
-text_muted = "#666666"
-border     = "#cccccc"
+background = "#f5f1e8"
+surface    = "#efeadc"
+primary    = "#e8e2d2"
+accent     = "#b3361b"
+text       = "#1a1a1a"
+text_muted = "#555555"
+text_faint = "#8a8a8a"
+border     = "#c8c2b3"
+link       = "#b3361b"
+heading    = "#b3361b"
+code_bg    = "#e8e2d2"
 
 [fonts]
-family       = "JetBrains Mono"
+family       = "Consolas"
 size_base    = 13
 size_small   = 11
-size_heading = 16
+size_heading = 18

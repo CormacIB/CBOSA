@@ -1,0 +1,2528 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>CBOSA — Paper</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@300;400;500;600;700&family=VT323&family=Inter:wght@300;400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+
+<script>
+  // Persisted defaults — edited by host when user toggles tweaks
+  window.__TWEAK_DEFAULTS__ = /*EDITMODE-BEGIN*/{
+    "theme": "karpathy",
+    "fontFamily": "IBM Plex Mono",
+    "fontSize": 14,
+    "scanlines": false,
+    "crtGlow": false,
+    "asciiHeader": true,
+    "dither": false,
+    "artSlots": true,
+    "density": "compact"
+  }/*EDITMODE-END*/;
+</script>
+
+<style>
+  :root {
+    /* Phosphor Green (default) */
+    --bg: #000000;
+    --bg-1: #050a06;
+    --bg-2: #0a140c;
+    --fg: #33ff66;
+    --fg-dim: #1a8033;
+    --fg-mute: #0e4d1d;
+    --accent: #ffb000;
+    --accent-dim: #805800;
+    --rule: #1a3a22;
+    --sel: rgba(51, 255, 102, 0.14);
+    --hot: #ff4d4d;
+    --glow: 0 0 6px rgba(51, 255, 102, 0.45);
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: "JetBrains Mono", "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 13px;
+    line-height: 1.45;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: geometricPrecision;
+  }
+
+  * { box-sizing: border-box; }
+
+  /* App shell */
+  #app {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* CRT glow on text */
+  body.crt-glow, body.crt-glow * {
+    text-shadow: 0 0 1px currentColor, 0 0 8px rgba(51,255,102,0.20);
+  }
+  body.crt-glow.theme-amber, body.crt-glow.theme-amber * {
+    text-shadow: 0 0 1px currentColor, 0 0 8px rgba(255,176,0,0.22);
+  }
+  body.crt-glow.theme-blue, body.crt-glow.theme-blue * {
+    text-shadow: 0 0 1px currentColor, 0 0 8px rgba(107,193,255,0.22);
+  }
+  body.crt-glow.theme-paper, body.crt-glow.theme-paper * {
+    text-shadow: none;
+  }
+
+  /* Scanlines overlay */
+  body.scanlines::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9000;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(0,0,0,0) 0px,
+      rgba(0,0,0,0) 2px,
+      rgba(0,0,0,0.22) 3px,
+      rgba(0,0,0,0) 4px
+    );
+    mix-blend-mode: multiply;
+  }
+  body.scanlines::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9001;
+    background: radial-gradient(ellipse at center, rgba(0,0,0,0) 50%, rgba(0,0,0,0.55) 100%);
+  }
+  body.theme-paper.scanlines::before { opacity: 0.35; }
+  body.theme-paper.scanlines::after { opacity: 0.25; }
+
+  /* Dither pattern */
+  body.dither #app {
+    background-image:
+      radial-gradient(rgba(51,255,102,0.05) 1px, transparent 1px),
+      radial-gradient(rgba(51,255,102,0.03) 1px, transparent 1px);
+    background-size: 4px 4px, 8px 8px;
+    background-position: 0 0, 2px 2px;
+  }
+  body.theme-amber.dither #app {
+    background-image:
+      radial-gradient(rgba(255,176,0,0.06) 1px, transparent 1px),
+      radial-gradient(rgba(255,176,0,0.03) 1px, transparent 1px);
+  }
+  body.theme-blue.dither #app {
+    background-image:
+      radial-gradient(rgba(107,193,255,0.06) 1px, transparent 1px),
+      radial-gradient(rgba(107,193,255,0.03) 1px, transparent 1px);
+  }
+  body.theme-paper.dither #app {
+    background-image:
+      radial-gradient(rgba(0,0,0,0.06) 1px, transparent 1px),
+      radial-gradient(rgba(0,0,0,0.03) 1px, transparent 1px);
+  }
+
+  /* Themes */
+  body.theme-phosphor {
+    --bg: #000000;
+    --bg-1: #050a06;
+    --bg-2: #0a140c;
+    --fg: #33ff66;
+    --fg-dim: #1a8033;
+    --fg-mute: #0e4d1d;
+    --accent: #ffb000;
+    --accent-dim: #805800;
+    --rule: #1a3a22;
+    --sel: rgba(51, 255, 102, 0.14);
+  }
+  body.theme-amber {
+    --bg: #0a0500;
+    --bg-1: #100800;
+    --bg-2: #1a0e00;
+    --fg: #ffb000;
+    --fg-dim: #805800;
+    --fg-mute: #3d2900;
+    --accent: #ff5500;
+    --accent-dim: #802b00;
+    --rule: #3d2900;
+    --sel: rgba(255,176,0,0.14);
+  }
+  body.theme-blue {
+    --bg: #00131f;
+    --bg-1: #001a2b;
+    --bg-2: #002238;
+    --fg: #6bc1ff;
+    --fg-dim: #3a7ab3;
+    --fg-mute: #1f4566;
+    --accent: #ffffff;
+    --accent-dim: #b3b3b3;
+    --rule: #1f4566;
+    --sel: rgba(107,193,255,0.14);
+  }
+  body.theme-paper {
+    --bg: #f5f1e8;
+    --bg-1: #efeadc;
+    --bg-2: #e8e2d2;
+    --fg: #1a1a1a;
+    --fg-dim: #555;
+    --fg-mute: #8a8a8a;
+    --accent: #b3361b;
+    --accent-dim: #8a2614;
+    --rule: #c8c2b3;
+    --sel: rgba(179,54,27,0.10);
+  }
+
+  /* — Karpathy Paper Wiki — academic, off-white, blue links */
+  body.theme-karpathy {
+    --bg: #fdfaf0;
+    --bg-1: #f6f1de;
+    --bg-2: #ede5c8;
+    --fg: #1a1a1a;
+    --fg-dim: #4a4a4a;
+    --fg-mute: #888;
+    --accent: #0033cc;
+    --accent-dim: #002388;
+    --rule: #d8cfa8;
+    --sel: rgba(0,51,204,0.10);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+  }
+  body.theme-karpathy { font-family: "IBM Plex Mono", ui-monospace, monospace !important; }
+  body.theme-karpathy .editor h1,
+  body.theme-karpathy .editor h2,
+  body.theme-karpathy .editor h3 {
+    font-family: "Lora", Georgia, serif;
+    font-weight: 600;
+    color: #1a1a1a;
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: 4px;
+  }
+  body.theme-karpathy .editor h1::before,
+  body.theme-karpathy .editor h2::before,
+  body.theme-karpathy .editor h3::before { content: none; }
+  body.theme-karpathy .ascii-header { font-family: "Lora", Georgia, serif; font-size: 18px; font-style: italic; letter-spacing: 0.02em; }
+  body.theme-karpathy .wikilink { text-decoration-style: solid; }
+  body.theme-karpathy .panel-head { background: var(--bg-1); }
+  body.theme-karpathy .winchrome { background: var(--bg-1); }
+  body.theme-karpathy .editor { font-size: 14px; }
+
+  /* — Obsidian Dark — soft purples + blues, rounded */
+  body.theme-obsidian {
+    --bg: #1e1e2e;
+    --bg-1: #232336;
+    --bg-2: #2a2a40;
+    --fg: #cdd6f4;
+    --fg-dim: #8b91b0;
+    --fg-mute: #585b70;
+    --accent: #cba6f7;
+    --accent-dim: #7a5fb8;
+    --rule: #383850;
+    --sel: rgba(203,166,247,0.14);
+    font-family: "Inter", system-ui, sans-serif;
+  }
+  body.theme-obsidian { font-family: "Inter", system-ui, sans-serif !important; }
+  body.theme-obsidian .editor h1,
+  body.theme-obsidian .editor h2,
+  body.theme-obsidian .editor h3 {
+    color: var(--accent);
+    font-weight: 600;
+  }
+  body.theme-obsidian .editor h1::before { content: "# "; color: #89b4fa; }
+  body.theme-obsidian .editor h2::before { content: "## "; color: #89b4fa; }
+  body.theme-obsidian .editor h3::before { content: "### "; color: #89b4fa; }
+  body.theme-obsidian .panel,
+  body.theme-obsidian .panel-head { background: var(--bg-1); }
+  body.theme-obsidian .input,
+  body.theme-obsidian .chip { border-radius: 6px; }
+  body.theme-obsidian .winbtn { border-radius: 50%; }
+  body.theme-obsidian .ascii-header { font-family: "JetBrains Mono", monospace; color: #89b4fa; }
+  body.theme-obsidian .editor code { background: var(--bg-2); border-radius: 4px; font-family: "JetBrains Mono", monospace; }
+  body.theme-obsidian .wikilink { color: #89b4fa; text-decoration-style: solid; }
+  body.theme-obsidian .editor { font-size: 14px; line-height: 1.6; }
+  body.theme-obsidian .frontmatter { border-radius: 6px; font-family: "JetBrains Mono", monospace; font-size: 12px; }
+
+  /* — Brutalist Swiss — pure white, hard borders, big numbers, Helvetica */
+  body.theme-swiss {
+    --bg: #ffffff;
+    --bg-1: #f4f4f4;
+    --bg-2: #e8e8e8;
+    --fg: #000000;
+    --fg-dim: #333;
+    --fg-mute: #888;
+    --accent: #ff0033;
+    --accent-dim: #cc0022;
+    --rule: #000000;
+    --sel: rgba(255,0,51,0.10);
+    font-family: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  }
+  body.theme-swiss { font-family: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif !important; }
+  body.theme-swiss .winchrome,
+  body.theme-swiss .menubar,
+  body.theme-swiss .panel-head,
+  body.theme-swiss .panel,
+  body.theme-swiss .statusbar,
+  body.theme-swiss .editor-bar { border-color: #000 !important; }
+  body.theme-swiss .panel-head { border-bottom-width: 2px; background: var(--bg); text-transform: uppercase; font-weight: 700; }
+  body.theme-swiss .winchrome { border-bottom-width: 2px; }
+  body.theme-swiss .statusbar { border-top-width: 2px; }
+  body.theme-swiss .menubar { border-bottom-width: 2px; }
+  body.theme-swiss .editor-bar { border-bottom-width: 2px; }
+  body.theme-swiss .workspace > .panel { border-right-width: 2px; }
+  body.theme-swiss .stack > .panel + .panel { border-top-width: 2px; }
+  body.theme-swiss .editor h1,
+  body.theme-swiss .editor h2,
+  body.theme-swiss .editor h3 {
+    font-family: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: #000;
+  }
+  body.theme-swiss .editor h1 { font-size: 2.2em; line-height: 1.0; margin: 22px 0 12px; }
+  body.theme-swiss .editor h1::before,
+  body.theme-swiss .editor h2::before,
+  body.theme-swiss .editor h3::before { content: none; }
+  body.theme-swiss .ascii-header { font-family: "Space Grotesk", "Inter", sans-serif; font-size: 32px; font-weight: 800; letter-spacing: -0.04em; text-align: left; padding-left: 8px; }
+  body.theme-swiss .chip { border-radius: 0; border-width: 1.5px; }
+  body.theme-swiss .input { border-radius: 0; border-width: 1.5px; }
+  body.theme-swiss .winbtn { border-radius: 0; border-width: 1.5px; }
+  body.theme-swiss .wikilink { color: var(--accent); text-decoration-style: solid; }
+  body.theme-swiss .bar-fill { box-shadow: none; }
+  body.theme-swiss .editor { font-size: 14px; }
+  body.theme-swiss .editor code { background: #f4f4f4; border-radius: 0; border-color: #000; }
+
+  /* Custom scrollbars */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--fg-mute); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--fg-dim); }
+
+  ::selection { background: var(--sel); color: var(--accent); }
+
+  a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+  a:hover { color: var(--fg); }
+
+  hr.row { border: none; border-top: 1px dashed var(--rule); margin: 6px 0; }
+
+  /* Density */
+  body.density-compact { font-size: 12px; line-height: 1.35; }
+  body.density-comfy  { font-size: 14px; line-height: 1.55; }
+
+  /* Generic utility classes */
+  .dim { color: var(--fg-dim); }
+  .mute { color: var(--fg-mute); }
+  .acc { color: var(--accent); }
+  .hot { color: var(--hot); }
+  .nowrap { white-space: nowrap; }
+  .row { display: flex; align-items: center; }
+  .col { display: flex; flex-direction: column; }
+  .gap-1 { gap: 4px; }
+  .gap-2 { gap: 8px; }
+  .gap-3 { gap: 12px; }
+  .grow { flex: 1; min-width: 0; min-height: 0; }
+
+  /* Window chrome (app frame mocked as Qt-ish) */
+  .winchrome {
+    height: 32px;
+    border-bottom: 1px solid var(--rule);
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    gap: 8px;
+    background: var(--bg-1);
+    flex: 0 0 32px;
+    font-size: 12px;
+  }
+  .winbtns { display: flex; gap: 6px; padding-right: 4px; }
+  .winbtn {
+    width: 12px; height: 12px;
+    border: 1px solid var(--fg-dim);
+    border-radius: 0;
+    display: inline-block;
+  }
+  .winbtn.x { border-color: var(--hot); }
+  .wintitle { color: var(--fg-dim); letter-spacing: 0.05em; }
+  .wintitle b { color: var(--fg); font-weight: 600; }
+
+  .menubar {
+    height: 26px;
+    border-bottom: 1px solid var(--rule);
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    padding: 0 6px;
+    gap: 2px;
+    flex: 0 0 26px;
+    font-size: 12px;
+  }
+  .menu {
+    padding: 2px 8px;
+    cursor: default;
+    color: var(--fg-dim);
+  }
+  .menu:hover { color: var(--fg); background: var(--sel); }
+  .menu.active { color: var(--fg); background: var(--sel); }
+
+  .menubar .right {
+    margin-left: auto;
+    display: flex;
+    gap: 12px;
+    color: var(--fg-dim);
+    padding-right: 6px;
+    font-size: 11px;
+    letter-spacing: 0.05em;
+  }
+  .menubar .right b { color: var(--accent); font-weight: 500; }
+
+  /* Workspace grid */
+  .workspace {
+    display: grid;
+    grid-template-columns: 280px 1fr 340px;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .workspace.density-compact { grid-template-columns: 240px 1fr 300px; }
+
+  /* Panel chrome (box-drawing characters via CSS) */
+  .panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    border-right: 1px solid var(--rule);
+    background: var(--bg);
+  }
+  .panel:last-child { border-right: none; }
+  .panel.stack { border-right: 1px solid var(--rule); }
+  .panel-head {
+    display: flex;
+    align-items: center;
+    height: 24px;
+    flex: 0 0 24px;
+    padding: 0 8px;
+    border-bottom: 1px solid var(--rule);
+    font-size: 11px;
+    color: var(--fg-dim);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    background: var(--bg-1);
+    user-select: none;
+  }
+  .panel-head .tab {
+    margin-right: 12px;
+    color: var(--fg-dim);
+    cursor: default;
+    padding: 0 0 0 0;
+    position: relative;
+  }
+  .panel-head .tab.active {
+    color: var(--fg);
+  }
+  .panel-head .tab.active::before {
+    content: "▌";
+    color: var(--accent);
+    margin-right: 4px;
+  }
+  .panel-head .glyph {
+    color: var(--accent);
+    margin-right: 6px;
+  }
+  .panel-head .ctrl {
+    margin-left: auto;
+    display: flex;
+    gap: 4px;
+    color: var(--fg-dim);
+  }
+  .panel-head .ctrl span {
+    padding: 0 4px;
+    cursor: default;
+  }
+  .panel-head .ctrl span:hover { color: var(--fg); background: var(--sel); }
+
+  .panel-body {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 6px 8px;
+  }
+
+  /* Right column splits */
+  .stack { display: flex; flex-direction: column; min-height: 0; }
+  .stack > .panel + .panel { border-top: 1px solid var(--rule); }
+
+  /* Status bar */
+  .statusbar {
+    height: 22px;
+    flex: 0 0 22px;
+    border-top: 1px solid var(--rule);
+    background: var(--bg-1);
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    font-size: 11px;
+    color: var(--fg-dim);
+    gap: 16px;
+    letter-spacing: 0.04em;
+  }
+  .statusbar .sep { color: var(--fg-mute); }
+  .statusbar .right { margin-left: auto; display: flex; gap: 14px; }
+  .statusbar b { color: var(--fg); font-weight: 500; }
+  .statusbar .acc { color: var(--accent); }
+
+  /* Tree (note browser) */
+  .tree { font-size: inherit; line-height: 1.55; }
+  .tree-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 4px;
+    cursor: default;
+    white-space: nowrap;
+    color: var(--fg);
+  }
+  .tree-row:hover { background: var(--sel); }
+  .tree-row.active { background: var(--sel); color: var(--accent); }
+  .tree-row .glyph { color: var(--fg-dim); width: 14px; display: inline-block; text-align: center; }
+  .tree-row.folder > .glyph { color: var(--accent); }
+  .tree-row .name { overflow: hidden; text-overflow: ellipsis; }
+  .tree-indent { display: inline-block; width: 14px; }
+
+  /* Form / inputs */
+  .input {
+    width: 100%;
+    background: var(--bg-1);
+    border: 1px solid var(--rule);
+    color: var(--fg);
+    font: inherit;
+    padding: 3px 6px;
+    outline: none;
+  }
+  .input:focus { border-color: var(--fg-dim); background: var(--bg-2); }
+  .input::placeholder { color: var(--fg-mute); }
+
+  .chip {
+    display: inline-block;
+    padding: 0 6px;
+    border: 1px solid var(--rule);
+    color: var(--fg-dim);
+    margin: 2px 4px 2px 0;
+    cursor: default;
+    font-size: 11px;
+    user-select: none;
+  }
+  .chip:hover { color: var(--fg); border-color: var(--fg-dim); }
+  .chip.active {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--sel);
+  }
+  .chip .ct { color: var(--fg-mute); margin-left: 4px; }
+
+  /* Editor */
+  .editor {
+    padding: 14px 32px;
+    max-width: 900px;
+    margin: 0 auto;
+    color: var(--fg);
+    font-size: inherit;
+  }
+  .editor h1, .editor h2, .editor h3 {
+    color: var(--fg);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    margin: 18px 0 8px;
+    font-family: inherit;
+  }
+  .editor h1 { font-size: 1.5em; }
+  .editor h1::before {
+    content: "# ";
+    color: var(--accent);
+  }
+  .editor h2 { font-size: 1.2em; }
+  .editor h2::before {
+    content: "## ";
+    color: var(--accent);
+  }
+  .editor h3 { font-size: 1.05em; }
+  .editor h3::before {
+    content: "### ";
+    color: var(--accent);
+  }
+  .editor p { margin: 8px 0; }
+  .editor ul { margin: 6px 0; padding-left: 22px; }
+  .editor li { margin: 3px 0; }
+  .editor ul li::marker { color: var(--accent); content: "› "; }
+  .editor code {
+    background: var(--bg-1);
+    border: 1px solid var(--rule);
+    padding: 0 4px;
+    color: var(--accent);
+  }
+  .editor blockquote {
+    margin: 8px 0;
+    padding: 4px 0 4px 12px;
+    border-left: 2px solid var(--accent);
+    color: var(--fg-dim);
+  }
+  .wikilink {
+    color: var(--accent);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+    text-decoration-style: dashed;
+  }
+  .wikilink:hover { color: var(--fg); background: var(--sel); }
+  .wikilink.broken { color: var(--hot); text-decoration-style: dotted; }
+  .frontmatter {
+    color: var(--fg-dim);
+    border: 1px dashed var(--rule);
+    padding: 6px 10px;
+    margin-bottom: 12px;
+    font-size: 0.95em;
+    background: var(--bg-1);
+  }
+  .frontmatter .k { color: var(--accent); }
+  .frontmatter .delim {
+    color: var(--fg-mute);
+    display: block;
+    margin: -2px 0 4px;
+  }
+
+  /* Editor toolbar */
+  .editor-bar {
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid var(--rule);
+    height: 28px;
+    flex: 0 0 28px;
+    padding: 0 12px;
+    gap: 12px;
+    font-size: 11px;
+    color: var(--fg-dim);
+    background: var(--bg);
+  }
+  .editor-bar .crumb { color: var(--fg-dim); }
+  .editor-bar .crumb b { color: var(--fg); font-weight: 500; }
+  .editor-bar .crumb .sep { color: var(--fg-mute); margin: 0 6px; }
+  .editor-bar .right { margin-left: auto; display: flex; gap: 12px; }
+  .editor-bar .tog { color: var(--fg-dim); cursor: default; }
+  .editor-bar .tog.on { color: var(--accent); }
+  .editor-bar .tog:hover { color: var(--fg); }
+
+  /* Tasks */
+  .task {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 2px 0;
+    cursor: default;
+  }
+  .task:hover { background: var(--sel); }
+  .task .box { color: var(--fg-dim); width: 16px; flex-shrink: 0; }
+  .task.done .box { color: var(--accent); }
+  .task.done .label { color: var(--fg-dim); text-decoration: line-through; }
+  .task .meta { margin-left: auto; color: var(--fg-mute); font-size: 11px; padding-left: 8px; }
+  .task .tag { color: var(--accent); }
+
+  /* Email list */
+  .mail {
+    display: grid;
+    grid-template-columns: 18px 1fr auto;
+    gap: 6px;
+    padding: 4px 0;
+    border-bottom: 1px dashed var(--rule);
+    cursor: default;
+    align-items: baseline;
+  }
+  .mail:hover { background: var(--sel); }
+  .mail .from { color: var(--fg); }
+  .mail .subj { color: var(--fg-dim); font-size: 11px; }
+  .mail .when { color: var(--fg-mute); font-size: 11px; }
+  .mail .pip { color: var(--accent); }
+  .mail.read .from { color: var(--fg-dim); }
+  .mail.read .pip { color: transparent; }
+  .mail .action {
+    grid-column: 2 / 4;
+    color: var(--accent);
+    font-size: 11px;
+    margin-top: 2px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .mail .action::before {
+    content: "↳ TASK:";
+    color: var(--fg-mute);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+  }
+
+  /* Bar chart for finance */
+  .barchart { display: flex; flex-direction: column; gap: 3px; margin: 4px 0; }
+  .bar-row { display: grid; grid-template-columns: 64px 1fr 56px; gap: 8px; align-items: center; font-size: 11px; }
+  .bar-row .cat { color: var(--fg-dim); }
+  .bar-row .amt { color: var(--fg); text-align: right; font-variant-numeric: tabular-nums; }
+  .bar-track {
+    background: var(--bg-1);
+    border: 1px solid var(--rule);
+    height: 10px;
+    position: relative;
+  }
+  .bar-fill {
+    background: var(--accent);
+    height: 100%;
+    box-shadow: var(--glow);
+  }
+  body.theme-paper .bar-fill { box-shadow: none; }
+
+  /* ASCII sparkline */
+  .spark {
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: -1px;
+    white-space: nowrap;
+  }
+
+  /* Art slots */
+  .artslot {
+    border: 1px dashed var(--fg-mute);
+    background:
+      repeating-linear-gradient(
+        45deg,
+        transparent 0 6px,
+        var(--bg-1) 6px 7px
+      );
+    padding: 18px 12px;
+    text-align: center;
+    color: var(--fg-mute);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin: 8px 0;
+    cursor: default;
+  }
+  .artslot:hover { color: var(--fg-dim); border-color: var(--fg-dim); }
+
+  /* ASCII header */
+  .ascii-header {
+    color: var(--accent);
+    white-space: pre;
+    line-height: 1.0;
+    font-size: 10px;
+    margin: 4px 0 8px;
+    text-align: center;
+    user-select: none;
+  }
+  .ascii-header.dim { color: var(--fg-dim); }
+
+  /* Backlinks block */
+  .backlinks-block {
+    margin-top: 24px;
+    border-top: 1px dashed var(--rule);
+    padding-top: 12px;
+    font-size: 12px;
+    color: var(--fg-dim);
+  }
+  .backlinks-block h4 {
+    margin: 0 0 6px;
+    color: var(--fg-dim);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-size: 10px;
+  }
+
+  /* Misc small */
+  .kbd {
+    display: inline-block;
+    border: 1px solid var(--rule);
+    padding: 0 4px;
+    color: var(--fg-dim);
+    font-size: 11px;
+    background: var(--bg-1);
+  }
+
+  /* Cursor blink for editor heading */
+  .blink {
+    animation: blink 1.1s steps(2, start) infinite;
+    color: var(--accent);
+  }
+  @keyframes blink { to { visibility: hidden; } }
+
+  /* Section dividers via box-drawing chars */
+  .rule-h {
+    color: var(--fg-mute);
+    white-space: pre;
+    overflow: hidden;
+    line-height: 1.0;
+    margin: 6px 0;
+    font-size: 11px;
+  }
+
+  /* Cmd palette overlay (closed by default) */
+  .cmdpal-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.55);
+    z-index: 1000;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 14vh;
+  }
+  .cmdpal {
+    width: 560px;
+    background: var(--bg);
+    border: 1px solid var(--accent);
+    box-shadow: 0 0 0 1px var(--bg-1), 0 0 30px rgba(255,176,0,0.18);
+  }
+  .cmdpal-head {
+    border-bottom: 1px solid var(--rule);
+    padding: 8px 12px;
+    color: var(--fg-dim);
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .cmdpal-head input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--fg);
+    font: inherit;
+    outline: none;
+  }
+  .cmdpal-list { max-height: 320px; overflow: auto; }
+  .cmdpal-row {
+    padding: 5px 12px;
+    display: flex;
+    gap: 10px;
+    color: var(--fg-dim);
+    cursor: default;
+  }
+  .cmdpal-row.active { background: var(--sel); color: var(--accent); }
+  .cmdpal-row .kind { color: var(--fg-mute); width: 80px; }
+
+  /* Paper-mode tweaks: round things off slightly */
+  body.theme-paper .winbtn,
+  body.theme-paper .winbtn.x { border-radius: 50%; }
+  body.theme-paper .ascii-header { font-family: "VT323", monospace; }
+
+  /* Disable CRT FX on non-terminal themes */
+  body.theme-karpathy.scanlines::before,
+  body.theme-karpathy.scanlines::after,
+  body.theme-obsidian.scanlines::before,
+  body.theme-obsidian.scanlines::after,
+  body.theme-swiss.scanlines::before,
+  body.theme-swiss.scanlines::after { display: none; }
+  body.theme-karpathy.crt-glow *,
+  body.theme-obsidian.crt-glow *,
+  body.theme-swiss.crt-glow * { text-shadow: none; }
+</style>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+</head>
+<body class="theme-karpathy">
+  <div id="app"></div>
+
+  <script type="text/babel" data-source="tweaks-panel.jsx">
+
+// tweaks-panel.jsx
+// Reusable Tweaks shell + form-control helpers.
+//
+// Owns the host protocol (listens for __activate_edit_mode / __deactivate_edit_mode,
+// posts __edit_mode_available / __edit_mode_set_keys / __edit_mode_dismissed) so
+// individual prototypes don't re-roll it. Ships a consistent set of controls so you
+// don't hand-draw <input type="range">, segmented radios, steppers, etc.
+//
+// Usage (in an HTML file that loads React + Babel):
+//
+//   const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+//     "primaryColor": "#D97757",
+//     "palette": ["#D97757", "#29261b", "#f6f4ef"],
+//     "fontSize": 16,
+//     "density": "regular",
+//     "dark": false
+//   }/*EDITMODE-END*/;
+//
+//   function App() {
+//     const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+//     return (
+//       <div style={{ fontSize: t.fontSize, color: t.primaryColor }}>
+//         Hello
+//         <TweaksPanel>
+//           <TweakSection label="Typography" />
+//           <TweakSlider label="Font size" value={t.fontSize} min={10} max={32} unit="px"
+//                        onChange={(v) => setTweak('fontSize', v)} />
+//           <TweakRadio  label="Density" value={t.density}
+//                        options={['compact', 'regular', 'comfy']}
+//                        onChange={(v) => setTweak('density', v)} />
+//           <TweakSection label="Theme" />
+//           <TweakColor  label="Primary" value={t.primaryColor}
+//                        options={['#D97757', '#2A6FDB', '#1F8A5B', '#7A5AE0']}
+//                        onChange={(v) => setTweak('primaryColor', v)} />
+//           <TweakColor  label="Palette" value={t.palette}
+//                        options={[['#D97757', '#29261b', '#f6f4ef'],
+//                                  ['#475569', '#0f172a', '#f1f5f9']]}
+//                        onChange={(v) => setTweak('palette', v)} />
+//           <TweakToggle label="Dark mode" value={t.dark}
+//                        onChange={(v) => setTweak('dark', v)} />
+//         </TweaksPanel>
+//       </div>
+//     );
+//   }
+//
+// ─────────────────────────────────────────────────────────────────────────────
+
+const __TWEAKS_STYLE = `
+  .twk-panel{position:fixed;right:16px;bottom:16px;z-index:2147483646;width:280px;
+    max-height:calc(100vh - 32px);display:flex;flex-direction:column;
+    transform:scale(var(--dc-inv-zoom,1));transform-origin:bottom right;
+    background:rgba(250,249,247,.78);color:#29261b;
+    -webkit-backdrop-filter:blur(24px) saturate(160%);backdrop-filter:blur(24px) saturate(160%);
+    border:.5px solid rgba(255,255,255,.6);border-radius:14px;
+    box-shadow:0 1px 0 rgba(255,255,255,.5) inset,0 12px 40px rgba(0,0,0,.18);
+    font:11.5px/1.4 ui-sans-serif,system-ui,-apple-system,sans-serif;overflow:hidden}
+  .twk-hd{display:flex;align-items:center;justify-content:space-between;
+    padding:10px 8px 10px 14px;cursor:move;user-select:none}
+  .twk-hd b{font-size:12px;font-weight:600;letter-spacing:.01em}
+  .twk-x{appearance:none;border:0;background:transparent;color:rgba(41,38,27,.55);
+    width:22px;height:22px;border-radius:6px;cursor:default;font-size:13px;line-height:1}
+  .twk-x:hover{background:rgba(0,0,0,.06);color:#29261b}
+  .twk-body{padding:2px 14px 14px;display:flex;flex-direction:column;gap:10px;
+    overflow-y:auto;overflow-x:hidden;min-height:0;
+    scrollbar-width:thin;scrollbar-color:rgba(0,0,0,.15) transparent}
+  .twk-body::-webkit-scrollbar{width:8px}
+  .twk-body::-webkit-scrollbar-track{background:transparent;margin:2px}
+  .twk-body::-webkit-scrollbar-thumb{background:rgba(0,0,0,.15);border-radius:4px;
+    border:2px solid transparent;background-clip:content-box}
+  .twk-body::-webkit-scrollbar-thumb:hover{background:rgba(0,0,0,.25);
+    border:2px solid transparent;background-clip:content-box}
+  .twk-row{display:flex;flex-direction:column;gap:5px}
+  .twk-row-h{flex-direction:row;align-items:center;justify-content:space-between;gap:10px}
+  .twk-lbl{display:flex;justify-content:space-between;align-items:baseline;
+    color:rgba(41,38,27,.72)}
+  .twk-lbl>span:first-child{font-weight:500}
+  .twk-val{color:rgba(41,38,27,.5);font-variant-numeric:tabular-nums}
+
+  .twk-sect{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+    color:rgba(41,38,27,.45);padding:10px 0 0}
+  .twk-sect:first-child{padding-top:0}
+
+  .twk-field{appearance:none;width:100%;height:26px;padding:0 8px;
+    border:.5px solid rgba(0,0,0,.1);border-radius:7px;
+    background:rgba(255,255,255,.6);color:inherit;font:inherit;outline:none}
+  .twk-field:focus{border-color:rgba(0,0,0,.25);background:rgba(255,255,255,.85)}
+  select.twk-field{padding-right:22px;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='rgba(0,0,0,.5)' d='M0 0h10L5 6z'/></svg>");
+    background-repeat:no-repeat;background-position:right 8px center}
+
+  .twk-slider{appearance:none;-webkit-appearance:none;width:100%;height:4px;margin:6px 0;
+    border-radius:999px;background:rgba(0,0,0,.12);outline:none}
+  .twk-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
+    width:14px;height:14px;border-radius:50%;background:#fff;
+    border:.5px solid rgba(0,0,0,.12);box-shadow:0 1px 3px rgba(0,0,0,.2);cursor:default}
+  .twk-slider::-moz-range-thumb{width:14px;height:14px;border-radius:50%;
+    background:#fff;border:.5px solid rgba(0,0,0,.12);box-shadow:0 1px 3px rgba(0,0,0,.2);cursor:default}
+
+  .twk-seg{position:relative;display:flex;padding:2px;border-radius:8px;
+    background:rgba(0,0,0,.06);user-select:none}
+  .twk-seg-thumb{position:absolute;top:2px;bottom:2px;border-radius:6px;
+    background:rgba(255,255,255,.9);box-shadow:0 1px 2px rgba(0,0,0,.12);
+    transition:left .15s cubic-bezier(.3,.7,.4,1),width .15s}
+  .twk-seg.dragging .twk-seg-thumb{transition:none}
+  .twk-seg button{appearance:none;position:relative;z-index:1;flex:1;border:0;
+    background:transparent;color:inherit;font:inherit;font-weight:500;min-height:22px;
+    border-radius:6px;cursor:default;padding:4px 6px;line-height:1.2;
+    overflow-wrap:anywhere}
+
+  .twk-toggle{position:relative;width:32px;height:18px;border:0;border-radius:999px;
+    background:rgba(0,0,0,.15);transition:background .15s;cursor:default;padding:0}
+  .twk-toggle[data-on="1"]{background:#34c759}
+  .twk-toggle i{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;
+    background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s}
+  .twk-toggle[data-on="1"] i{transform:translateX(14px)}
+
+  .twk-num{display:flex;align-items:center;height:26px;padding:0 0 0 8px;
+    border:.5px solid rgba(0,0,0,.1);border-radius:7px;background:rgba(255,255,255,.6)}
+  .twk-num-lbl{font-weight:500;color:rgba(41,38,27,.6);cursor:ew-resize;
+    user-select:none;padding-right:8px}
+  .twk-num input{flex:1;min-width:0;height:100%;border:0;background:transparent;
+    font:inherit;font-variant-numeric:tabular-nums;text-align:right;padding:0 8px 0 0;
+    outline:none;color:inherit;-moz-appearance:textfield}
+  .twk-num input::-webkit-inner-spin-button,.twk-num input::-webkit-outer-spin-button{
+    -webkit-appearance:none;margin:0}
+  .twk-num-unit{padding-right:8px;color:rgba(41,38,27,.45)}
+
+  .twk-btn{appearance:none;height:26px;padding:0 12px;border:0;border-radius:7px;
+    background:rgba(0,0,0,.78);color:#fff;font:inherit;font-weight:500;cursor:default}
+  .twk-btn:hover{background:rgba(0,0,0,.88)}
+  .twk-btn.secondary{background:rgba(0,0,0,.06);color:inherit}
+  .twk-btn.secondary:hover{background:rgba(0,0,0,.1)}
+
+  .twk-swatch{appearance:none;-webkit-appearance:none;width:56px;height:22px;
+    border:.5px solid rgba(0,0,0,.1);border-radius:6px;padding:0;cursor:default;
+    background:transparent;flex-shrink:0}
+  .twk-swatch::-webkit-color-swatch-wrapper{padding:0}
+  .twk-swatch::-webkit-color-swatch{border:0;border-radius:5.5px}
+  .twk-swatch::-moz-color-swatch{border:0;border-radius:5.5px}
+
+  .twk-chips{display:flex;gap:6px}
+  .twk-chip{position:relative;appearance:none;flex:1;min-width:0;height:46px;
+    padding:0;border:0;border-radius:6px;overflow:hidden;cursor:default;
+    box-shadow:0 0 0 .5px rgba(0,0,0,.12),0 1px 2px rgba(0,0,0,.06);
+    transition:transform .12s cubic-bezier(.3,.7,.4,1),box-shadow .12s}
+  .twk-chip:hover{transform:translateY(-1px);
+    box-shadow:0 0 0 .5px rgba(0,0,0,.18),0 4px 10px rgba(0,0,0,.12)}
+  .twk-chip[data-on="1"]{box-shadow:0 0 0 1.5px rgba(0,0,0,.85),
+    0 2px 6px rgba(0,0,0,.15)}
+  .twk-chip>span{position:absolute;top:0;bottom:0;right:0;width:34%;
+    display:flex;flex-direction:column;box-shadow:-1px 0 0 rgba(0,0,0,.1)}
+  .twk-chip>span>i{flex:1;box-shadow:0 -1px 0 rgba(0,0,0,.1)}
+  .twk-chip>span>i:first-child{box-shadow:none}
+  .twk-chip svg{position:absolute;top:6px;left:6px;width:13px;height:13px;
+    filter:drop-shadow(0 1px 1px rgba(0,0,0,.3))}
+`;
+
+// ── useTweaks ───────────────────────────────────────────────────────────────
+// Single source of truth for tweak values. setTweak persists via the host
+// (__edit_mode_set_keys → host rewrites the EDITMODE block on disk).
+function useTweaks(defaults) {
+  const [values, setValues] = React.useState(defaults);
+  // Accepts either setTweak('key', value) or setTweak({ key: value, ... }) so a
+  // useState-style call doesn't write a "[object Object]" key into the persisted
+  // JSON block.
+  const setTweak = React.useCallback((keyOrEdits, val) => {
+    const edits = typeof keyOrEdits === 'object' && keyOrEdits !== null
+      ? keyOrEdits : { [keyOrEdits]: val };
+    setValues((prev) => ({ ...prev, ...edits }));
+    window.parent.postMessage({ type: '__edit_mode_set_keys', edits }, '*');
+    // Same-window signal so in-page listeners (deck-stage rail thumbnails)
+    // can react — the parent message only reaches the host, not peers.
+    window.dispatchEvent(new CustomEvent('tweakchange', { detail: edits }));
+  }, []);
+  return [values, setTweak];
+}
+
+// ── TweaksPanel ─────────────────────────────────────────────────────────────
+// Floating shell. Registers the protocol listener BEFORE announcing
+// availability — if the announce ran first, the host's activate could land
+// before our handler exists and the toolbar toggle would silently no-op.
+// The close button posts __edit_mode_dismissed so the host's toolbar toggle
+// flips off in lockstep; the host echoes __deactivate_edit_mode back which
+// is what actually hides the panel.
+function TweaksPanel({ title = 'Tweaks', noDeckControls = false, children }) {
+  const [open, setOpen] = React.useState(false);
+  const dragRef = React.useRef(null);
+  // Auto-inject a rail toggle when a <deck-stage> is on the page. The
+  // toggle drives the deck's per-viewer _railVisible via window message;
+  // state is mirrored from the same localStorage key the deck reads so
+  // the control reflects reality across reloads. The mechanism is the
+  // message — authors who want custom placement can post it directly
+  // and pass noDeckControls to suppress this one.
+  const hasDeckStage = React.useMemo(
+    () => typeof document !== 'undefined' && !!document.querySelector('deck-stage'),
+    [],
+  );
+  // Hide the toggle until the host has actually enabled the rail (the
+  // __omelette_rail_enabled window message, posted only when the
+  // omelette_deck_rail_enabled flag is on for this user). The initial read
+  // covers TweaksPanel mounting after the message already arrived; the
+  // listener covers the common case of mounting first.
+  const [railEnabled, setRailEnabled] = React.useState(
+    () => hasDeckStage && !!document.querySelector('deck-stage')?._railEnabled,
+  );
+  React.useEffect(() => {
+    if (!hasDeckStage || railEnabled) return undefined;
+    const onMsg = (e) => {
+      if (e.data && e.data.type === '__omelette_rail_enabled') setRailEnabled(true);
+    };
+    window.addEventListener('message', onMsg);
+    return () => window.removeEventListener('message', onMsg);
+  }, [hasDeckStage, railEnabled]);
+  const [railVisible, setRailVisible] = React.useState(() => {
+    try { return localStorage.getItem('deck-stage.railVisible') !== '0'; } catch (e) { return true; }
+  });
+  const toggleRail = (on) => {
+    setRailVisible(on);
+    window.postMessage({ type: '__deck_rail_visible', on }, '*');
+  };
+  const offsetRef = React.useRef({ x: 16, y: 16 });
+  const PAD = 16;
+
+  const clampToViewport = React.useCallback(() => {
+    const panel = dragRef.current;
+    if (!panel) return;
+    const w = panel.offsetWidth, h = panel.offsetHeight;
+    const maxRight = Math.max(PAD, window.innerWidth - w - PAD);
+    const maxBottom = Math.max(PAD, window.innerHeight - h - PAD);
+    offsetRef.current = {
+      x: Math.min(maxRight, Math.max(PAD, offsetRef.current.x)),
+      y: Math.min(maxBottom, Math.max(PAD, offsetRef.current.y)),
+    };
+    panel.style.right = offsetRef.current.x + 'px';
+    panel.style.bottom = offsetRef.current.y + 'px';
+  }, []);
+
+  React.useEffect(() => {
+    if (!open) return;
+    clampToViewport();
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', clampToViewport);
+      return () => window.removeEventListener('resize', clampToViewport);
+    }
+    const ro = new ResizeObserver(clampToViewport);
+    ro.observe(document.documentElement);
+    return () => ro.disconnect();
+  }, [open, clampToViewport]);
+
+  React.useEffect(() => {
+    const onMsg = (e) => {
+      const t = e?.data?.type;
+      if (t === '__activate_edit_mode') setOpen(true);
+      else if (t === '__deactivate_edit_mode') setOpen(false);
+    };
+    window.addEventListener('message', onMsg);
+    window.parent.postMessage({ type: '__edit_mode_available' }, '*');
+    return () => window.removeEventListener('message', onMsg);
+  }, []);
+
+  const dismiss = () => {
+    setOpen(false);
+    window.parent.postMessage({ type: '__edit_mode_dismissed' }, '*');
+  };
+
+  const onDragStart = (e) => {
+    const panel = dragRef.current;
+    if (!panel) return;
+    const r = panel.getBoundingClientRect();
+    const sx = e.clientX, sy = e.clientY;
+    const startRight = window.innerWidth - r.right;
+    const startBottom = window.innerHeight - r.bottom;
+    const move = (ev) => {
+      offsetRef.current = {
+        x: startRight - (ev.clientX - sx),
+        y: startBottom - (ev.clientY - sy),
+      };
+      clampToViewport();
+    };
+    const up = () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+  };
+
+  if (!open) return null;
+  return (
+    <>
+      <style>{__TWEAKS_STYLE}</style>
+      <div ref={dragRef} className="twk-panel" data-noncommentable=""
+           style={{ right: offsetRef.current.x, bottom: offsetRef.current.y }}>
+        <div className="twk-hd" onMouseDown={onDragStart}>
+          <b>{title}</b>
+          <button className="twk-x" aria-label="Close tweaks"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={dismiss}>✕</button>
+        </div>
+        <div className="twk-body">
+          {children}
+          {hasDeckStage && railEnabled && !noDeckControls && (
+            <TweakSection label="Deck">
+              <TweakToggle label="Thumbnail rail" value={railVisible} onChange={toggleRail} />
+            </TweakSection>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ── Layout helpers ──────────────────────────────────────────────────────────
+
+function TweakSection({ label, children }) {
+  return (
+    <>
+      <div className="twk-sect">{label}</div>
+      {children}
+    </>
+  );
+}
+
+function TweakRow({ label, value, children, inline = false }) {
+  return (
+    <div className={inline ? 'twk-row twk-row-h' : 'twk-row'}>
+      <div className="twk-lbl">
+        <span>{label}</span>
+        {value != null && <span className="twk-val">{value}</span>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// ── Controls ────────────────────────────────────────────────────────────────
+
+function TweakSlider({ label, value, min = 0, max = 100, step = 1, unit = '', onChange }) {
+  return (
+    <TweakRow label={label} value={`${value}${unit}`}>
+      <input type="range" className="twk-slider" min={min} max={max} step={step}
+             value={value} onChange={(e) => onChange(Number(e.target.value))} />
+    </TweakRow>
+  );
+}
+
+function TweakToggle({ label, value, onChange }) {
+  return (
+    <div className="twk-row twk-row-h">
+      <div className="twk-lbl"><span>{label}</span></div>
+      <button type="button" className="twk-toggle" data-on={value ? '1' : '0'}
+              role="switch" aria-checked={!!value}
+              onClick={() => onChange(!value)}><i /></button>
+    </div>
+  );
+}
+
+function TweakRadio({ label, value, options, onChange }) {
+  const trackRef = React.useRef(null);
+  const [dragging, setDragging] = React.useState(false);
+  // The active value is read by pointer-move handlers attached for the lifetime
+  // of a drag — ref it so a stale closure doesn't fire onChange for every move.
+  const valueRef = React.useRef(value);
+  valueRef.current = value;
+
+  // Segments wrap mid-word once per-segment width runs out. The track is
+  // ~248px (280 panel − 28 body pad − 4 seg pad), each button loses 12px
+  // to its own padding, and 11.5px system-ui averages ~6.3px/char — so 2
+  // options fit ~16 chars each, 3 fit ~10. Past that (or >3 options), fall
+  // back to a dropdown rather than wrap.
+  const labelLen = (o) => String(typeof o === 'object' ? o.label : o).length;
+  const maxLen = options.reduce((m, o) => Math.max(m, labelLen(o)), 0);
+  const fitsAsSegments = maxLen <= ({ 2: 16, 3: 10 }[options.length] ?? 0);
+  if (!fitsAsSegments) {
+    // <select> emits strings — map back to the original option value so the
+    // fallback stays type-preserving (numbers, booleans) like the segment path.
+    const resolve = (s) => {
+      const m = options.find((o) => String(typeof o === 'object' ? o.value : o) === s);
+      return m === undefined ? s : typeof m === 'object' ? m.value : m;
+    };
+    return <TweakSelect label={label} value={value} options={options}
+                        onChange={(s) => onChange(resolve(s))} />;
+  }
+  const opts = options.map((o) => (typeof o === 'object' ? o : { value: o, label: o }));
+  const idx = Math.max(0, opts.findIndex((o) => o.value === value));
+  const n = opts.length;
+
+  const segAt = (clientX) => {
+    const r = trackRef.current.getBoundingClientRect();
+    const inner = r.width - 4;
+    const i = Math.floor(((clientX - r.left - 2) / inner) * n);
+    return opts[Math.max(0, Math.min(n - 1, i))].value;
+  };
+
+  const onPointerDown = (e) => {
+    setDragging(true);
+    const v0 = segAt(e.clientX);
+    if (v0 !== valueRef.current) onChange(v0);
+    const move = (ev) => {
+      if (!trackRef.current) return;
+      const v = segAt(ev.clientX);
+      if (v !== valueRef.current) onChange(v);
+    };
+    const up = () => {
+      setDragging(false);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+
+  return (
+    <TweakRow label={label}>
+      <div ref={trackRef} role="radiogroup" onPointerDown={onPointerDown}
+           className={dragging ? 'twk-seg dragging' : 'twk-seg'}>
+        <div className="twk-seg-thumb"
+             style={{ left: `calc(2px + ${idx} * (100% - 4px) / ${n})`,
+                      width: `calc((100% - 4px) / ${n})` }} />
+        {opts.map((o) => (
+          <button key={o.value} type="button" role="radio" aria-checked={o.value === value}>
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </TweakRow>
+  );
+}
+
+function TweakSelect({ label, value, options, onChange }) {
+  return (
+    <TweakRow label={label}>
+      <select className="twk-field" value={value} onChange={(e) => onChange(e.target.value)}>
+        {options.map((o) => {
+          const v = typeof o === 'object' ? o.value : o;
+          const l = typeof o === 'object' ? o.label : o;
+          return <option key={v} value={v}>{l}</option>;
+        })}
+      </select>
+    </TweakRow>
+  );
+}
+
+function TweakText({ label, value, placeholder, onChange }) {
+  return (
+    <TweakRow label={label}>
+      <input className="twk-field" type="text" value={value} placeholder={placeholder}
+             onChange={(e) => onChange(e.target.value)} />
+    </TweakRow>
+  );
+}
+
+function TweakNumber({ label, value, min, max, step = 1, unit = '', onChange }) {
+  const clamp = (n) => {
+    if (min != null && n < min) return min;
+    if (max != null && n > max) return max;
+    return n;
+  };
+  const startRef = React.useRef({ x: 0, val: 0 });
+  const onScrubStart = (e) => {
+    e.preventDefault();
+    startRef.current = { x: e.clientX, val: value };
+    const decimals = (String(step).split('.')[1] || '').length;
+    const move = (ev) => {
+      const dx = ev.clientX - startRef.current.x;
+      const raw = startRef.current.val + dx * step;
+      const snapped = Math.round(raw / step) * step;
+      onChange(clamp(Number(snapped.toFixed(decimals))));
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  return (
+    <div className="twk-num">
+      <span className="twk-num-lbl" onPointerDown={onScrubStart}>{label}</span>
+      <input type="number" value={value} min={min} max={max} step={step}
+             onChange={(e) => onChange(clamp(Number(e.target.value)))} />
+      {unit && <span className="twk-num-unit">{unit}</span>}
+    </div>
+  );
+}
+
+// Relative-luminance contrast pick — checkmarks drawn over a swatch need to
+// read on both #111 and #fafafa without per-option configuration. Hex input
+// only (#rgb / #rrggbb); named or rgb()/hsl() colors fall through to "light".
+function __twkIsLight(hex) {
+  const h = String(hex).replace('#', '');
+  const x = h.length === 3 ? h.replace(/./g, (c) => c + c) : h.padEnd(6, '0');
+  const n = parseInt(x.slice(0, 6), 16);
+  if (Number.isNaN(n)) return true;
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  return r * 299 + g * 587 + b * 114 > 148000;
+}
+
+const __TwkCheck = ({ light }) => (
+  <svg viewBox="0 0 14 14" aria-hidden="true">
+    <path d="M3 7.2 5.8 10 11 4.2" fill="none" strokeWidth="2.2"
+          strokeLinecap="round" strokeLinejoin="round"
+          stroke={light ? 'rgba(0,0,0,.78)' : '#fff'} />
+  </svg>
+);
+
+// TweakColor — curated color/palette picker. Each option is either a single
+// hex string or an array of 1-5 hex strings; the card adapts — a lone color
+// renders solid, a palette renders colors[0] as the hero (left ~2/3) with the
+// rest stacked in a sharp column on the right. onChange emits the
+// option in the shape it was passed (string stays string, array stays array).
+// Without options it falls back to the native color input for back-compat.
+function TweakColor({ label, value, options, onChange }) {
+  if (!options || !options.length) {
+    return (
+      <div className="twk-row twk-row-h">
+        <div className="twk-lbl"><span>{label}</span></div>
+        <input type="color" className="twk-swatch" value={value}
+               onChange={(e) => onChange(e.target.value)} />
+      </div>
+    );
+  }
+  // Native <input type=color> emits lowercase hex per the HTML spec, so
+  // compare case-insensitively. String() guards JSON.stringify(undefined),
+  // which returns the primitive undefined (no .toLowerCase).
+  const key = (o) => String(JSON.stringify(o)).toLowerCase();
+  const cur = key(value);
+  return (
+    <TweakRow label={label}>
+      <div className="twk-chips" role="radiogroup">
+        {options.map((o, i) => {
+          const colors = Array.isArray(o) ? o : [o];
+          const [hero, ...rest] = colors;
+          const sup = rest.slice(0, 4);
+          const on = key(o) === cur;
+          return (
+            <button key={i} type="button" className="twk-chip" role="radio"
+                    aria-checked={on} data-on={on ? '1' : '0'}
+                    aria-label={colors.join(', ')} title={colors.join(' · ')}
+                    style={{ background: hero }}
+                    onClick={() => onChange(o)}>
+              {sup.length > 0 && (
+                <span>
+                  {sup.map((c, j) => <i key={j} style={{ background: c }} />)}
+                </span>
+              )}
+              {on && <__TwkCheck light={__twkIsLight(hero)} />}
+            </button>
+          );
+        })}
+      </div>
+    </TweakRow>
+  );
+}
+
+function TweakButton({ label, onClick, secondary = false }) {
+  return (
+    <button type="button" className={secondary ? 'twk-btn secondary' : 'twk-btn'}
+            onClick={onClick}>{label}</button>
+  );
+}
+
+Object.assign(window, {
+  useTweaks, TweaksPanel, TweakSection, TweakRow,
+  TweakSlider, TweakToggle, TweakRadio, TweakSelect,
+  TweakText, TweakNumber, TweakColor, TweakButton,
+});
+
+</script>
+  <script type="text/babel" data-source="data.jsx">
+// Sample data for the CBOSA mockup — generic grad student
+// Notes are stored as { name, folder, tags, content, backlinks }
+
+const NOTES = [
+  {
+    name: "2026-05-11",
+    folder: "daily",
+    tags: ["daily", "todo"],
+    title: "Mon 2026-05-11",
+    content: `---
+title: Mon 2026-05-11
+date: 2026-05-11
+tags: [daily, todo]
+related: [[Advisor Meeting 2026-05-08]], [[GNN Ablation]]
+---
+
+# Mon 2026-05-11
+
+## morning
+
+- coffee, re-ran the [[GNN Ablation]] at lr=5e-4. still flat after 8 epochs.
+- skimmed *Mamba: Linear-Time Sequence Modeling*. selective SSMs are very satisfying.
+  the discretization step is the part i still have to redo by hand.
+
+## todo
+
+- [ ] email prof. chen re: thesis topic narrowing (#meeting)
+- [ ] finish stats210 pset 4 by wed (#class)
+- [x] turn in lab safety form
+- [ ] start a [[Reading Notes]] entry for mamba
+
+## scratch
+
+> "the goal of the model is to learn what to forget."
+> -- somewhere in the mamba intro, paraphrased
+
+something i keep circling back to: a #captured arxiv link rarely turns into a
+real note unless i force a one-paragraph summary in my own words within 24h.
+
+see also: [[On Reading Papers]] · [[Captured: arxiv 2312.00752]]`
+  },
+  {
+    name: "2026-05-10",
+    folder: "daily",
+    tags: ["daily"],
+    title: "Sun 2026-05-10",
+    content: `---
+title: Sun 2026-05-10
+date: 2026-05-10
+tags: [daily]
+---
+
+# Sun 2026-05-10
+
+slow morning. wrote a bit on [[On Reading Papers]]. groceries.
+
+afternoon: read through *Attention Is All You Need* again. the residual + layernorm
+ordering still bites me every time. wrote a small diagram in [[Attention Revisited]].
+
+evening: dinner w/ M. they asked the "but what is the thesis actually about" question.
+i did not have a clean answer. #todo write a one-paragraph version.`
+  },
+  {
+    name: "GNN Ablation",
+    folder: "research",
+    tags: ["research", "experiments"],
+    title: "GNN Ablation",
+    content: `# GNN Ablation
+
+setup: same model, four pooling choices, OGB-arxiv.
+
+## runs
+
+| pool   | val acc | test acc |
+|--------|---------|----------|
+| mean   | 0.7321  | 0.7185   |
+| sum    | 0.7298  | 0.7152   |
+| max    | 0.7019  | 0.6940   |
+| attn   | 0.7414  | 0.7280   |
+
+## notes
+
+attention pool wins but only by ~1pt. matches [[Xu 2019 GIN]] expectations.
+need to rerun w/ lr=5e-4 (currently using 1e-3) — see [[2026-05-11]].`
+  },
+  {
+    name: "Attention Revisited",
+    folder: "research",
+    tags: ["research", "transformers"],
+    title: "Attention Revisited",
+    content: `# Attention Revisited
+
+re-deriving QKV by hand. the *why* of scaling by sqrt(d_k):
+preserves variance of the dot product as d_k grows.
+
+residual stream view (anthropic interp): every block reads from + writes to
+the residual; attention is a routing mechanism between positions.
+
+see [[Mamba SSM Notes]] for the contrast.`
+  },
+  {
+    name: "Mamba SSM Notes",
+    folder: "research",
+    tags: ["research", "captured"],
+    title: "Mamba SSM Notes",
+    content: `# Mamba SSM Notes
+
+source: [[Captured: arxiv 2312.00752]]
+
+the input-dependent A, B, C matrices are the whole trick. you lose convolutional
+form but gain selectivity — the model decides which past tokens influence the
+current state.
+
+still hazy on the hardware-aware scan implementation. revisit.`
+  },
+  {
+    name: "On Reading Papers",
+    folder: "ideas",
+    tags: ["idea", "meta"],
+    title: "On Reading Papers",
+    content: `# On Reading Papers
+
+a process i keep almost following:
+
+1. one-sentence prediction of the result before reading
+2. read intro + conclusion
+3. write the paper's claim in my own words
+4. then go through methods
+
+i skip step 1 most of the time. that's the step that turns reading into thinking.`
+  },
+  {
+    name: "Advisor Meeting 2026-05-08",
+    folder: "meetings",
+    tags: ["meeting", "todo"],
+    title: "Advisor Meeting 2026-05-08",
+    content: `# Advisor Meeting 2026-05-08
+
+attendees: me, prof. chen
+duration: 32m
+
+## discussed
+
+- thesis scope. "narrow it." the current framing covers three projects.
+- [[GNN Ablation]] results — chen wants a baseline vs. plain MLP-on-features.
+- summer plans. internship vs. on-campus research split.
+
+## action items
+
+- [ ] send a 1-paragraph thesis statement by friday
+- [ ] add MLP baseline to ablation
+- [ ] decide on summer by june 1`
+  },
+  {
+    name: "Stats 210 PSet 4",
+    folder: "coursework",
+    tags: ["class", "todo"],
+    title: "Stats 210 PSet 4",
+    content: `# Stats 210 PSet 4
+
+due: 2026-05-13 23:59
+course: STATS 210 — Inference
+
+## problems
+
+1. MLE for shifted exponential — done
+2. Cramer-Rao bound derivation — in progress
+3. EM for two-component GMM — not started
+
+needs a clean writeup of (3) before submitting.`
+  },
+  {
+    name: "CS231n Notes",
+    folder: "coursework",
+    tags: ["class", "research"],
+    title: "CS231n Notes",
+    content: `# CS231n Notes
+
+lecture 7 — training neural nets II.
+
+- batch norm: normalize within a batch, learnable scale/shift.
+- the "internal covariate shift" justification is contested; works regardless.
+- layer norm is the transformer-friendly variant.`
+  },
+  {
+    name: "Captured: arxiv 2312.00752",
+    folder: "captures",
+    tags: ["captured", "research"],
+    title: "Captured: Mamba",
+    content: `---
+source: https://arxiv.org/abs/2312.00752
+captured: 2026-05-09
+summary: |
+  Selective state space model. Replaces attention's O(n^2) with a linear-time
+  scan, with input-dependent parameters that let the model selectively
+  propagate or forget information along the sequence dimension.
+---
+
+# Captured: Mamba: Linear-Time Sequence Modeling with Selective State Spaces
+
+(full extracted text would go here in a real capture)
+
+related: [[Mamba SSM Notes]] · [[Attention Revisited]]`
+  },
+  {
+    name: "Reading Notes",
+    folder: "ideas",
+    tags: ["meta"],
+    title: "Reading Notes",
+    content: `# Reading Notes
+
+index of paper notes.
+
+- [[Attention Revisited]]
+- [[Mamba SSM Notes]]
+- [[Xu 2019 GIN]] (todo: write up)`
+  },
+  {
+    name: "Xu 2019 GIN",
+    folder: "research",
+    tags: ["research"],
+    title: "Xu 2019 GIN",
+    content: `# Xu 2019 GIN
+
+placeholder — need to write up. see [[GNN Ablation]] for empirical results.`
+  },
+];
+
+// Tree structure (folder → notes), preserves order
+const FOLDER_ORDER = ["daily", "research", "coursework", "meetings", "ideas", "captures"];
+
+// Tags with counts derived from NOTES
+function deriveTags(notes) {
+  const counts = {};
+  notes.forEach(n => (n.tags || []).forEach(t => { counts[t] = (counts[t] || 0) + 1; }));
+  return Object.entries(counts).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+}
+
+// Backlinks derived from wikilink scan
+function deriveBacklinks(notes) {
+  const by = {};
+  const re = /\[\[([^\]]+)\]\]/g;
+  notes.forEach(src => {
+    let m;
+    while ((m = re.exec(src.content)) !== null) {
+      const target = m[1].trim();
+      if (!by[target]) by[target] = new Set();
+      by[target].add(src.name);
+    }
+  });
+  return by;
+}
+
+const TASKS = [
+  { id: 1, text: "send 1-paragraph thesis statement", due: "fri", tag: "meeting", done: false },
+  { id: 2, text: "finish stats210 pset 4 (problem 3)", due: "wed", tag: "class", done: false },
+  { id: 3, text: "re-run GNN ablation at lr=5e-4", due: "today", tag: "research", done: false },
+  { id: 4, text: "add MLP baseline to ablation", due: "—", tag: "research", done: false },
+  { id: 5, text: "email prof. chen re: thesis topic", due: "today", tag: "meeting", done: false },
+  { id: 6, text: "refill metro card", due: "—", tag: "life", done: false },
+  { id: 7, text: "turn in lab safety form", due: "—", tag: "class", done: true },
+  { id: 8, text: "submit conference travel reimbursement", due: "—", tag: "life", done: true },
+];
+
+const FINANCE = {
+  monthLabel: "MAY 2026",
+  spent: 1247.32,
+  income: 2100.00,
+  cats: [
+    { cat: "rent",        amt: 800.00 },
+    { cat: "food",        amt: 187.42 },
+    { cat: "other",       amt: 154.90 },
+    { cat: "books",       amt: 64.00  },
+    { cat: "coffee",      amt: 41.00  },
+  ],
+  // weekly spend, 14 weeks
+  weekly: [212, 198, 305, 188, 240, 167, 280, 195, 260, 220, 175, 290, 248, 247],
+};
+
+const EMAILS = [
+  { id: 1, from: "prof. chen", subj: "re: thesis narrowing — let's chat thu?", when: "9:14", read: false, action: "reply by EOD wed" },
+  { id: 2, from: "stats210 staff", subj: "PSet 4 — clarification on Q3", when: "8:02", read: false, action: "review Q3 hint before sub" },
+  { id: 3, from: "arxiv-daily",  subj: "5 papers in cs.LG you might like", when: "7:00", read: true },
+  { id: 4, from: "registrar",     subj: "Spring 2026 grades posted",        when: "yda", read: false, action: null },
+  { id: 5, from: "mom",           subj: "are you eating",                    when: "yda", read: true },
+  { id: 6, from: "iclr 2026",     subj: "Reviewer assignments uploaded",     when: "yda", read: true, action: "open reviews by may 20" },
+  { id: 7, from: "github",        subj: "[mamba-fork] new release v0.4.1",   when: "2d",  read: true },
+];
+
+const CANVAS = [
+  { course: "STATS 210", assign: "PSet 4",          due: "Wed 5/13", status: "open"  },
+  { course: "CS 231n",   assign: "Lecture 7 quiz",  due: "Thu 5/14", status: "open"  },
+  { course: "STATS 210", assign: "Midterm grade",   due: "—",        status: "grade: 87" },
+  { course: "CS 231n",   assign: "Project proposal",due: "Mon 5/18", status: "open"  },
+];
+
+Object.assign(window, {
+  NOTES,
+  FOLDER_ORDER,
+  deriveTags,
+  deriveBacklinks,
+  TASKS,
+  FINANCE,
+  EMAILS,
+  CANVAS,
+});
+
+</script>
+  <script type="text/babel" data-source="panels.jsx">
+// panels.jsx — all dockable panel components for the CBOSA mockup
+
+const { useState, useMemo, useRef, useEffect } = React;
+
+// ──────────────────────────────────────────────────────────
+// Panel wrapper
+// ──────────────────────────────────────────────────────────
+function Panel({ title, glyph, tabs, activeTab, onTabChange, tools, children, style }) {
+  return (
+    <div className="panel" style={style}>
+      <div className="panel-head">
+        {glyph ? <span className="glyph">{glyph}</span> : null}
+        {tabs ? (
+          tabs.map((t, i) => (
+            <span
+              key={t}
+              className={"tab" + (i === activeTab ? " active" : "")}
+              onClick={() => onTabChange && onTabChange(i)}
+            >
+              {t}
+            </span>
+          ))
+        ) : (
+          <span style={{ color: "var(--fg)" }}>{title}</span>
+        )}
+        <span className="ctrl">
+          {(tools || ["─", "□", "×"]).map((t, i) => (
+            <span key={i}>{t}</span>
+          ))}
+        </span>
+      </div>
+      <div className="panel-body">{children}</div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────
+// Note Browser — folder tree + tags + search
+// ──────────────────────────────────────────────────────────
+function NoteBrowser({ notes, currentNote, onSelect, tagFilter, onTagFilter, query, onQuery }) {
+  const folders = useMemo(() => {
+    const map = {};
+    notes.forEach(n => {
+      if (!map[n.folder]) map[n.folder] = [];
+      map[n.folder].push(n);
+    });
+    FOLDER_ORDER.forEach(f => map[f] && map[f].sort((a, b) => a.title.localeCompare(b.title)));
+    return map;
+  }, [notes]);
+
+  const tags = useMemo(() => deriveTags(notes), [notes]);
+
+  const filtered = useMemo(() => {
+    let xs = notes;
+    if (tagFilter) xs = xs.filter(n => n.tags.includes(tagFilter));
+    if (query) {
+      const q = query.toLowerCase();
+      xs = xs.filter(n =>
+        n.title.toLowerCase().includes(q) ||
+        n.content.toLowerCase().includes(q) ||
+        n.tags.join(" ").includes(q)
+      );
+    }
+    return new Set(xs.map(n => n.name));
+  }, [notes, tagFilter, query]);
+
+  const folderGlyph = "▾";
+  const noteGlyph = "·";
+
+  return (
+    <>
+      <input
+        className="input"
+        placeholder="search notes  Ctrl+P"
+        value={query}
+        onChange={e => onQuery(e.target.value)}
+        style={{ marginBottom: 6 }}
+      />
+
+      <div className="rule-h">{"┄".repeat(50)}</div>
+      <div style={{ fontSize: 10, letterSpacing: "0.08em", color: "var(--fg-mute)", textTransform: "uppercase", margin: "6px 0 4px" }}>
+        tags
+      </div>
+      <div style={{ marginBottom: 6 }}>
+        <span
+          className={"chip" + (!tagFilter ? " active" : "")}
+          onClick={() => onTagFilter(null)}
+        >
+          all<span className="ct">{notes.length}</span>
+        </span>
+        {tags.map(([t, c]) => (
+          <span
+            key={t}
+            className={"chip" + (tagFilter === t ? " active" : "")}
+            onClick={() => onTagFilter(tagFilter === t ? null : t)}
+          >
+            #{t}<span className="ct">{c}</span>
+          </span>
+        ))}
+      </div>
+
+      <div className="rule-h">{"┄".repeat(50)}</div>
+      <div style={{ fontSize: 10, letterSpacing: "0.08em", color: "var(--fg-mute)", textTransform: "uppercase", margin: "6px 0 4px" }}>
+        notes/
+      </div>
+
+      <div className="tree">
+        {FOLDER_ORDER.map(folder => {
+          const items = (folders[folder] || []).filter(n => filtered.has(n.name));
+          if (!items.length && (tagFilter || query)) return null;
+          return (
+            <div key={folder}>
+              <div className="tree-row folder">
+                <span className="glyph">{folderGlyph}</span>
+                <span className="name">{folder}/</span>
+                <span style={{ marginLeft: "auto", color: "var(--fg-mute)", fontSize: 11 }}>{(folders[folder] || []).length}</span>
+              </div>
+              {items.map(n => (
+                <div
+                  key={n.name}
+                  className={"tree-row" + (currentNote === n.name ? " active" : "")}
+                  onClick={() => onSelect(n.name)}
+                >
+                  <span className="tree-indent" />
+                  <span className="glyph">{noteGlyph}</span>
+                  <span className="name">{n.title}</span>
+                </div>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="rule-h" style={{ marginTop: 12 }}>{"┄".repeat(50)}</div>
+      <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+        <span className="chip" style={{ flex: 1, textAlign: "center" }}>+ new note</span>
+        <span className="chip" style={{ flex: 1, textAlign: "center" }}>+ daily</span>
+      </div>
+    </>
+  );
+}
+
+// ──────────────────────────────────────────────────────────
+// Markdown renderer (lightweight, in-page)
+// ──────────────────────────────────────────────────────────
+function renderMarkdown(src, knownNoteNames, onLinkClick) {
+  // Split into front-matter + body
+  let body = src;
+  let fm = null;
+  const fmMatch = src.match(/^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/);
+  if (fmMatch) {
+    fm = fmMatch[1];
+    body = fmMatch[2];
+  }
+
+  const lines = body.split("\n");
+  const out = [];
+  let i = 0;
+  let key = 0;
+  const k = () => "k" + (key++);
+
+  const inline = (text) => {
+    // wikilinks
+    const parts = [];
+    const re = /\[\[([^\]]+)\]\]|\*\*([^*]+)\*\*|\*([^*]+)\*|`([^`]+)`/g;
+    let lastIdx = 0;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      if (m.index > lastIdx) parts.push(text.slice(lastIdx, m.index));
+      if (m[1]) {
+        const target = m[1].trim();
+        const known = knownNoteNames.has(target) || [...knownNoteNames].some(n => n.toLowerCase() === target.toLowerCase());
+        parts.push(
+          <span
+            key={k()}
+            className={"wikilink" + (known ? "" : " broken")}
+            onClick={() => onLinkClick && onLinkClick(target)}
+            title={known ? `open ${target}` : `unresolved: ${target}`}
+          >
+            {target}
+          </span>
+        );
+      } else if (m[2]) {
+        parts.push(<b key={k()}>{m[2]}</b>);
+      } else if (m[3]) {
+        parts.push(<i key={k()}>{m[3]}</i>);
+      } else if (m[4]) {
+        parts.push(<code key={k()}>{m[4]}</code>);
+      }
+      lastIdx = m.index + m[0].length;
+    }
+    if (lastIdx < text.length) parts.push(text.slice(lastIdx));
+    // Also colorize #tags
+    return parts.flatMap((p, idx) => {
+      if (typeof p !== "string") return [p];
+      const subs = [];
+      const tre = /#[a-z0-9_-]+/gi;
+      let li = 0, mm;
+      while ((mm = tre.exec(p)) !== null) {
+        if (mm.index > li) subs.push(p.slice(li, mm.index));
+        subs.push(<span key={k()} style={{ color: "var(--accent)" }}>{mm[0]}</span>);
+        li = mm.index + mm[0].length;
+      }
+      if (li < p.length) subs.push(p.slice(li));
+      return subs.length ? subs : [p];
+    });
+  };
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    if (/^#\s/.test(line)) { out.push(<h1 key={k()}>{inline(line.replace(/^#\s/, ""))}</h1>); i++; continue; }
+    if (/^##\s/.test(line)) { out.push(<h2 key={k()}>{inline(line.replace(/^##\s/, ""))}</h2>); i++; continue; }
+    if (/^###\s/.test(line)) { out.push(<h3 key={k()}>{inline(line.replace(/^###\s/, ""))}</h3>); i++; continue; }
+    if (/^>\s?/.test(line)) {
+      const buf = [];
+      while (i < lines.length && /^>\s?/.test(lines[i])) {
+        buf.push(lines[i].replace(/^>\s?/, ""));
+        i++;
+      }
+      out.push(<blockquote key={k()}>{buf.map((b, j) => <div key={j}>{inline(b)}</div>)}</blockquote>);
+      continue;
+    }
+    if (/^[-*]\s\[[ x]\]\s/.test(line)) {
+      const buf = [];
+      while (i < lines.length && /^[-*]\s\[[ x]\]\s/.test(lines[i])) {
+        const m = lines[i].match(/^[-*]\s\[([ x])\]\s(.*)$/);
+        buf.push({ done: m[1] === "x", text: m[2] });
+        i++;
+      }
+      out.push(
+        <ul key={k()} style={{ listStyle: "none", paddingLeft: 4 }}>
+          {buf.map((b, j) => (
+            <li key={j} style={{ color: b.done ? "var(--fg-dim)" : "var(--fg)", textDecoration: b.done ? "line-through" : "none" }}>
+              <span style={{ color: "var(--accent)", marginRight: 6 }}>{b.done ? "[x]" : "[ ]"}</span>
+              {inline(b.text)}
+            </li>
+          ))}
+        </ul>
+      );
+      continue;
+    }
+    if (/^[-*]\s/.test(line)) {
+      const buf = [];
+      while (i < lines.length && /^[-*]\s/.test(lines[i]) && !/^[-*]\s\[[ x]\]\s/.test(lines[i])) {
+        buf.push(lines[i].replace(/^[-*]\s/, ""));
+        i++;
+      }
+      out.push(<ul key={k()}>{buf.map((b, j) => <li key={j}>{inline(b)}</li>)}</ul>);
+      continue;
+    }
+    if (line.startsWith("|")) {
+      // table
+      const buf = [];
+      while (i < lines.length && lines[i].startsWith("|")) {
+        buf.push(lines[i]);
+        i++;
+      }
+      const rows = buf.filter(l => !/^\|\s*[-:|\s]+\|$/.test(l)).map(l =>
+        l.split("|").slice(1, -1).map(c => c.trim())
+      );
+      out.push(
+        <table key={k()} style={{ borderCollapse: "collapse", margin: "8px 0", fontSize: "0.95em" }}>
+          <tbody>
+            {rows.map((r, ri) => (
+              <tr key={ri}>
+                {r.map((c, ci) => (
+                  ri === 0
+                    ? <th key={ci} style={{ borderBottom: "1px solid var(--rule)", padding: "2px 12px 2px 0", textAlign: "left", color: "var(--accent)", fontWeight: 500 }}>{c}</th>
+                    : <td key={ci} style={{ padding: "2px 12px 2px 0", color: "var(--fg)" }}>{c}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      );
+      continue;
+    }
+    if (line.trim() === "") { out.push(<div key={k()} style={{ height: 6 }} />); i++; continue; }
+    out.push(<p key={k()}>{inline(line)}</p>);
+    i++;
+  }
+
+  return { fm, body: out };
+}
+
+// ──────────────────────────────────────────────────────────
+// Note Editor + Backlinks
+// ──────────────────────────────────────────────────────────
+function NoteEditor({ note, allNotes, backlinks, onOpenNote, artSlots }) {
+  if (!note) return <div style={{ padding: 24, color: "var(--fg-mute)" }}>no note open. press <span className="kbd">Ctrl+P</span> or pick one from the browser.</div>;
+
+  const knownNames = useMemo(() => {
+    const s = new Set();
+    allNotes.forEach(n => { s.add(n.name); s.add(n.title); });
+    return s;
+  }, [allNotes]);
+
+  const { fm, body } = renderMarkdown(note.content, knownNames, (target) => {
+    // resolve case-insensitive by name OR title
+    const hit = allNotes.find(n => n.name.toLowerCase() === target.toLowerCase() || n.title.toLowerCase() === target.toLowerCase());
+    if (hit) onOpenNote(hit.name);
+  });
+
+  const refs = backlinks[note.name] || backlinks[note.title] || new Set();
+
+  return (
+    <div className="editor">
+      {fm && (
+        <div className="frontmatter">
+          <span className="delim">---</span>
+          {fm.split("\n").map((l, i) => {
+            const m = l.match(/^([a-z_]+):\s*(.*)$/i);
+            if (!m) return <div key={i}>{l}</div>;
+            return <div key={i}><span className="k">{m[1]}</span>: {m[2]}</div>;
+          })}
+          <span className="delim">---</span>
+        </div>
+      )}
+      {body}
+
+      {artSlots && (
+        <div className="artslot">
+          [ banner art slot — drop your image / svg here ]
+        </div>
+      )}
+
+      <div className="backlinks-block">
+        <h4>backlinks · {[...refs].length}</h4>
+        {[...refs].length === 0 ? (
+          <div style={{ color: "var(--fg-mute)" }}>no notes link here yet.</div>
+        ) : (
+          [...refs].map(n => {
+            const src = allNotes.find(x => x.name === n);
+            return (
+              <div key={n} style={{ marginBottom: 4 }}>
+                <span className="wikilink" onClick={() => onOpenNote(n)}>{src ? src.title : n}</span>
+                <span style={{ color: "var(--fg-mute)", marginLeft: 8, fontSize: 11 }}>{src && src.folder + "/"}</span>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────
+// Tasks panel
+// ──────────────────────────────────────────────────────────
+function Tasks({ tasks, onToggle }) {
+  const open = tasks.filter(t => !t.done);
+  const done = tasks.filter(t => t.done);
+  return (
+    <>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+        <span style={{ color: "var(--fg-dim)", fontSize: 11, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+          open · {open.length}
+        </span>
+        <span style={{ color: "var(--fg-mute)", fontSize: 11 }}>
+          {done.length}/{tasks.length} done
+        </span>
+      </div>
+      {open.map(t => (
+        <div key={t.id} className="task" onClick={() => onToggle(t.id)}>
+          <span className="box">[ ]</span>
+          <span className="label">
+            {t.text} <span className="tag">#{t.tag}</span>
+          </span>
+          <span className="meta">{t.due}</span>
+        </div>
+      ))}
+      {done.length > 0 && (
+        <>
+          <div className="rule-h" style={{ marginTop: 10 }}>{"┄".repeat(40)}</div>
+          <div style={{ color: "var(--fg-mute)", fontSize: 11, letterSpacing: "0.06em", textTransform: "uppercase", margin: "6px 0 4px" }}>
+            done
+          </div>
+          {done.map(t => (
+            <div key={t.id} className="task done" onClick={() => onToggle(t.id)}>
+              <span className="box">[x]</span>
+              <span className="label">{t.text}</span>
+            </div>
+          ))}
+        </>
+      )}
+    </>
+  );
+}
+
+// ──────────────────────────────────────────────────────────
+// Finance panel — ASCII-ish bars + sparkline
+// ──────────────────────────────────────────────────────────
+function Finance({ data, artSlots }) {
+  const max = Math.max(...data.cats.map(c => c.amt));
+  const sparkChars = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"];
+  const wmax = Math.max(...data.weekly);
+  const spark = data.weekly.map(w => sparkChars[Math.min(7, Math.floor((w / wmax) * 7))]).join("");
+
+  return (
+    <>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+        <span style={{ color: "var(--fg-dim)", fontSize: 11, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+          ledger · {data.monthLabel}
+        </span>
+        <span style={{ color: "var(--fg-mute)", fontSize: 11 }}>net ${(data.income - data.spent).toFixed(2)}</span>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, margin: "6px 0 8px" }}>
+        <div>
+          <div style={{ color: "var(--fg-mute)", fontSize: 10, letterSpacing: "0.06em", textTransform: "uppercase" }}>out</div>
+          <div style={{ color: "var(--accent)", fontSize: 18, lineHeight: 1.1 }}>${data.spent.toFixed(2)}</div>
+        </div>
+        <div>
+          <div style={{ color: "var(--fg-mute)", fontSize: 10, letterSpacing: "0.06em", textTransform: "uppercase" }}>in</div>
+          <div style={{ color: "var(--fg)", fontSize: 18, lineHeight: 1.1 }}>${data.income.toFixed(2)}</div>
+        </div>
+      </div>
+
+      <div className="spark" title="weekly spend, last 14 wks">{spark}</div>
+      <div style={{ color: "var(--fg-mute)", fontSize: 10, marginBottom: 8, letterSpacing: "0.05em" }}>
+        14 wks ←———→ now
+      </div>
+
+      <div className="barchart">
+        {data.cats.map(c => {
+          const w = (c.amt / max) * 100;
+          return (
+            <div className="bar-row" key={c.cat}>
+              <span className="cat">{c.cat}</span>
+              <div className="bar-track">
+                <div className="bar-fill" style={{ width: w + "%" }} />
+              </div>
+              <span className="amt">${c.amt.toFixed(2)}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      {artSlots && (
+        <div className="artslot" style={{ padding: "10px 8px", marginTop: 8 }}>
+          [ icon for finance panel ]
+        </div>
+      )}
+    </>
+  );
+}
+
+// ──────────────────────────────────────────────────────────
+// Email intake panel
+// ──────────────────────────────────────────────────────────
+function Email({ emails }) {
+  const unread = emails.filter(e => !e.read).length;
+  return (
+    <>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+        <span style={{ color: "var(--fg-dim)", fontSize: 11, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+          inbox · imap
+        </span>
+        <span style={{ color: "var(--accent)", fontSize: 11 }}>● {unread} new</span>
+      </div>
+
+      {emails.map(e => (
+        <div key={e.id} className={"mail" + (e.read ? " read" : "")}>
+          <span className="pip">●</span>
+          <div className="col" style={{ minWidth: 0 }}>
+            <span className="from">{e.from}</span>
+            <span className="subj">{e.subj}</span>
+            {e.action && <span className="action">{e.action}</span>}
+          </div>
+          <span className="when">{e.when}</span>
+        </div>
+      ))}
+    </>
+  );
+}
+
+// ──────────────────────────────────────────────────────────
+// Canvas-style assignment list (compact)
+// ──────────────────────────────────────────────────────────
+function CanvasList({ items }) {
+  return (
+    <>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+        <span style={{ color: "var(--fg-dim)", fontSize: 11, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+          canvas lms
+        </span>
+        <span style={{ color: "var(--fg-mute)", fontSize: 11 }}>sync 4m ago</span>
+      </div>
+      {items.map((it, i) => (
+        <div key={i} style={{ display: "grid", gridTemplateColumns: "60px 1fr auto", gap: 6, padding: "3px 0", borderBottom: "1px dashed var(--rule)", fontSize: 12 }}>
+          <span style={{ color: "var(--accent)" }}>{it.course}</span>
+          <span style={{ color: "var(--fg)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.assign}</span>
+          <span style={{ color: it.status.startsWith("grade") ? "var(--fg-dim)" : "var(--accent)", fontSize: 11 }}>{it.due === "—" ? it.status : it.due}</span>
+        </div>
+      ))}
+    </>
+  );
+}
+
+Object.assign(window, { Panel, NoteBrowser, NoteEditor, Tasks, Finance, Email, CanvasList });
+
+</script>
+  <script type="text/babel" data-source="app.jsx">
+// app.jsx — top-level CBOSA window
+
+const { useState, useMemo, useEffect } = React;
+
+const ASCII_LOGO = `   ___ ___  ___  ___   _
+  / __| _ )/ _ \\/ __| /_\\
+ | (__| _ \\ (_) \\__ \\/ _ \\
+  \\___|___/\\___/|___/_/ \\_\\  v0.1 · personal os`;
+
+function App() {
+  // Allow URL hash to override default theme so explorations canvas can pin a variant
+  const hashTheme = (typeof window !== "undefined" && window.location.hash.match(/theme=([a-z]+)/) || [])[1];
+  const defaults = hashTheme
+    ? { ...window.__TWEAK_DEFAULTS__, theme: hashTheme,
+        scanlines: hashTheme === "phosphor" || hashTheme === "amber" || hashTheme === "blue" || hashTheme === "paper",
+        crtGlow:   hashTheme === "phosphor" || hashTheme === "amber" || hashTheme === "blue",
+        asciiHeader: hashTheme !== "swiss" ? window.__TWEAK_DEFAULTS__.asciiHeader : true }
+    : window.__TWEAK_DEFAULTS__;
+  const [t, setTweak] = useTweaks(defaults);
+
+  const [currentNote, setCurrentNote] = useState("2026-05-11");
+  const [tagFilter, setTagFilter] = useState(null);
+  const [query, setQuery] = useState("");
+  const [tasks, setTasks] = useState(window.TASKS);
+  const [activeMenu, setActiveMenu] = useState(null);
+  const [cmdOpen, setCmdOpen] = useState(false);
+  const [cmdQuery, setCmdQuery] = useState("");
+  const [cmdIdx, setCmdIdx] = useState(0);
+
+  const backlinks = useMemo(() => deriveBacklinks(NOTES), []);
+  const note = useMemo(() => NOTES.find(n => n.name === currentNote), [currentNote]);
+
+  // Apply theme & art settings to body
+  useEffect(() => {
+    document.body.className = [
+      "theme-" + t.theme,
+      t.crtGlow ? "crt-glow" : "",
+      t.scanlines ? "scanlines" : "",
+      t.dither ? "dither" : "",
+      "density-" + t.density,
+    ].filter(Boolean).join(" ");
+  }, [t.theme, t.crtGlow, t.scanlines, t.dither, t.density]);
+
+  useEffect(() => {
+    document.documentElement.style.setProperty("--app-font", `"${t.fontFamily}", "JetBrains Mono", ui-monospace, monospace`);
+    document.body.style.fontFamily = `"${t.fontFamily}", "JetBrains Mono", ui-monospace, monospace`;
+    document.body.style.fontSize = t.fontSize + "px";
+  }, [t.fontFamily, t.fontSize]);
+
+  // Command palette keybind
+  useEffect(() => {
+    const h = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        setCmdOpen(true);
+      } else if (e.key === "Escape") {
+        setCmdOpen(false);
+        setActiveMenu(null);
+      }
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, []);
+
+  const toggleTask = (id) =>
+    setTasks(xs => xs.map(x => x.id === id ? { ...x, done: !x.done } : x));
+
+  const openNote = (name) => {
+    const hit = NOTES.find(n => n.name === name || n.title === name);
+    if (hit) {
+      setCurrentNote(hit.name);
+      setCmdOpen(false);
+    }
+  };
+
+  // Cmd palette items: notes + panels + commands
+  const cmdItems = useMemo(() => {
+    const q = cmdQuery.toLowerCase();
+    const noteItems = NOTES.map(n => ({ kind: "note", label: n.title, sub: n.folder + "/", action: () => openNote(n.name) }));
+    const cmds = [
+      { kind: "command", label: "today's daily note", action: () => openNote("2026-05-11") },
+      { kind: "command", label: "switch theme: phosphor", action: () => setTweak("theme", "phosphor") },
+      { kind: "command", label: "switch theme: amber", action: () => setTweak("theme", "amber") },
+      { kind: "command", label: "switch theme: blue (3270)", action: () => setTweak("theme", "blue") },
+      { kind: "command", label: "switch theme: paper", action: () => setTweak("theme", "paper") },
+      { kind: "command", label: "toggle scanlines", action: () => setTweak("scanlines", !t.scanlines) },
+      { kind: "command", label: "toggle crt glow", action: () => setTweak("crtGlow", !t.crtGlow) },
+      { kind: "panel", label: "add panel: graph view" },
+      { kind: "panel", label: "add panel: backlinks" },
+      { kind: "panel", label: "add panel: capture" },
+    ];
+    const all = [...cmds, ...noteItems];
+    if (!q) return all;
+    return all.filter(c => c.label.toLowerCase().includes(q) || (c.sub || "").toLowerCase().includes(q));
+  }, [cmdQuery, t.scanlines, t.crtGlow]);
+
+  useEffect(() => { setCmdIdx(0); }, [cmdQuery, cmdOpen]);
+
+  const runCmd = (item) => { if (item && item.action) item.action(); setCmdOpen(false); };
+
+  // Apply right-column composition based on density
+  const wsCols = t.density === "compact" ? "240px 1fr 300px" : t.density === "comfy" ? "300px 1fr 360px" : "280px 1fr 340px";
+
+  return (
+    <>
+      {/* App window chrome */}
+      <div className="winchrome">
+        <div className="winbtns">
+          <span className="winbtn x" />
+          <span className="winbtn" />
+          <span className="winbtn" />
+        </div>
+        <div className="wintitle">
+          <b>CBOSA</b> · <span>~/cbosa/vault</span> · <span style={{ color: "var(--accent)" }}>● local</span>
+        </div>
+        <div style={{ marginLeft: "auto", color: "var(--fg-mute)", fontSize: 11, letterSpacing: "0.06em" }}>
+          {t.theme.toUpperCase()} · {t.fontFamily.replace(/^\w/, c => c.toUpperCase())} · {t.fontSize}px
+        </div>
+      </div>
+
+      {/* Menu bar */}
+      <div className="menubar">
+        {["File", "Edit", "View", "Workspace", "Panels", "Theme", "Help"].map(m => (
+          <span
+            key={m}
+            className={"menu" + (activeMenu === m ? " active" : "")}
+            onClick={() => setActiveMenu(activeMenu === m ? null : m)}
+          >
+            {m}
+          </span>
+        ))}
+        <div className="right">
+          <span>tue · <b>10:14</b></span>
+          <span>cpu <b>4%</b></span>
+          <span>ai: <b>null</b></span>
+        </div>
+      </div>
+
+      {/* Optional ASCII header */}
+      {t.asciiHeader && (
+        <div style={{ padding: "8px 16px 2px", borderBottom: "1px solid var(--rule)", background: "var(--bg-1)" }}>
+          <pre className="ascii-header">{ASCII_LOGO}</pre>
+        </div>
+      )}
+
+      {/* Workspace */}
+      <div className="workspace" style={{ gridTemplateColumns: wsCols }}>
+        {/* LEFT: Note Browser */}
+        <Panel glyph="[N]" tabs={["NOTE BROWSER", "GRAPH"]} activeTab={0} onTabChange={() => {}}>
+          <NoteBrowser
+            notes={NOTES}
+            currentNote={currentNote}
+            onSelect={setCurrentNote}
+            tagFilter={tagFilter}
+            onTagFilter={setTagFilter}
+            query={query}
+            onQuery={setQuery}
+          />
+          {t.artSlots && (
+            <div className="artslot" style={{ marginTop: 8 }}>
+              [ vault icon slot ]
+            </div>
+          )}
+        </Panel>
+
+        {/* CENTER: Note Editor */}
+        <div className="panel" style={{ borderRight: "1px solid var(--rule)" }}>
+          <div className="editor-bar">
+            <span className="crumb">
+              <span style={{ color: "var(--accent)" }}>~/cbosa/vault/</span>
+              <b>{note ? note.folder + "/" + note.name + ".md" : "—"}</b>
+            </span>
+            <div className="right">
+              <span className="tog on">[edit]</span>
+              <span className="tog">[preview]</span>
+              <span className="tog">[split]</span>
+              <span className="mute">·</span>
+              <span className="tog">⟲ saved 12s ago</span>
+            </div>
+          </div>
+          <div className="panel-body" style={{ padding: 0 }}>
+            <NoteEditor
+              note={note}
+              allNotes={NOTES}
+              backlinks={backlinks}
+              onOpenNote={openNote}
+              artSlots={t.artSlots}
+            />
+          </div>
+        </div>
+
+        {/* RIGHT: stack of three small panels */}
+        <div className="stack">
+          <Panel glyph="[T]" tabs={["TASKS"]} activeTab={0} style={{ flex: "0 0 38%", minHeight: 200, borderRight: "none", borderBottom: "1px solid var(--rule)" }}>
+            <Tasks tasks={tasks} onToggle={toggleTask} />
+          </Panel>
+          <Panel glyph="[$]" tabs={["FINANCE", "CANVAS"]} activeTab={0} style={{ flex: "0 0 34%", minHeight: 180, borderRight: "none", borderBottom: "1px solid var(--rule)" }}>
+            <Finance data={FINANCE} artSlots={t.artSlots} />
+            <div className="rule-h">{"┄".repeat(40)}</div>
+            <CanvasList items={CANVAS} />
+          </Panel>
+          <Panel glyph="[@]" tabs={["EMAIL"]} activeTab={0} style={{ flex: 1, minHeight: 180, borderRight: "none" }}>
+            <Email emails={EMAILS} />
+          </Panel>
+        </div>
+      </div>
+
+      {/* Status bar */}
+      <div className="statusbar">
+        <span>● <b>connected</b></span>
+        <span className="sep">│</span>
+        <span>vault: <b>{NOTES.length}</b> notes</span>
+        <span className="sep">│</span>
+        <span>tasks: <b className="acc">{tasks.filter(x => !x.done).length}</b> open</span>
+        <span className="sep">│</span>
+        <span>theme: <b>{t.theme}</b></span>
+        <div className="right">
+          <span><span className="kbd">Ctrl+P</span> palette</span>
+          <span><span className="kbd">Ctrl+S</span> save</span>
+          <span><span className="kbd">⌘,</span> theme.toml</span>
+        </div>
+      </div>
+
+      {/* Command palette */}
+      {cmdOpen && (
+        <div className="cmdpal-backdrop" onClick={() => setCmdOpen(false)}>
+          <div className="cmdpal" onClick={e => e.stopPropagation()}>
+            <div className="cmdpal-head">
+              <span style={{ color: "var(--accent)" }}>{">"}</span>
+              <input
+                autoFocus
+                value={cmdQuery}
+                onChange={e => setCmdQuery(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === "ArrowDown") { e.preventDefault(); setCmdIdx(i => Math.min(cmdItems.length - 1, i + 1)); }
+                  else if (e.key === "ArrowUp") { e.preventDefault(); setCmdIdx(i => Math.max(0, i - 1)); }
+                  else if (e.key === "Enter") { e.preventDefault(); runCmd(cmdItems[cmdIdx]); }
+                }}
+                placeholder="search notes, panels, commands…"
+              />
+              <span style={{ color: "var(--fg-mute)", fontSize: 11 }}>{cmdItems.length} hits</span>
+            </div>
+            <div className="cmdpal-list">
+              {cmdItems.slice(0, 60).map((it, i) => (
+                <div
+                  key={i}
+                  className={"cmdpal-row" + (i === cmdIdx ? " active" : "")}
+                  onMouseEnter={() => setCmdIdx(i)}
+                  onClick={() => runCmd(it)}
+                >
+                  <span className="kind">{it.kind}</span>
+                  <span style={{ flex: 1 }}>{it.label}</span>
+                  {it.sub && <span style={{ color: "var(--fg-mute)" }}>{it.sub}</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tweaks panel */}
+      <TweaksPanel title="Tweaks">
+        <TweakSection label="Aesthetic" />
+        <TweakSelect
+          label="Theme"
+          value={t.theme}
+          options={["phosphor", "amber", "blue", "paper", "karpathy", "obsidian", "swiss"]}
+          onChange={v => setTweak("theme", v)}
+        />
+
+        <TweakSection label="Typography" />
+        <TweakSelect
+          label="Font"
+          value={t.fontFamily}
+          options={["JetBrains Mono", "IBM Plex Mono", "VT323"]}
+          onChange={v => setTweak("fontFamily", v)}
+        />
+        <TweakSlider
+          label="Size"
+          value={t.fontSize}
+          min={11}
+          max={18}
+          step={1}
+          unit="px"
+          onChange={v => setTweak("fontSize", v)}
+        />
+        <TweakRadio
+          label="Density"
+          value={t.density}
+          options={["compact", "regular", "comfy"]}
+          onChange={v => setTweak("density", v)}
+        />
+
+        <TweakSection label="CRT / Art" />
+        <TweakToggle label="Scanlines"     value={t.scanlines}    onChange={v => setTweak("scanlines", v)} />
+        <TweakToggle label="Phosphor glow" value={t.crtGlow}      onChange={v => setTweak("crtGlow", v)} />
+        <TweakToggle label="ASCII header"  value={t.asciiHeader}  onChange={v => setTweak("asciiHeader", v)} />
+        <TweakToggle label="Dither bg"     value={t.dither}       onChange={v => setTweak("dither", v)} />
+        <TweakToggle label="Art slots"     value={t.artSlots}     onChange={v => setTweak("artSlots", v)} />
+      </TweaksPanel>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("app")).render(<App />);
+
+</script>
+</body>
+</html>

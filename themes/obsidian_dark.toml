@@ -1,0 +1,21 @@
+# CBOSA Obsidian Dark Theme
+# Colors match the HTML design reference exactly.
+
+[colors]
+background = "#1e1e2e"
+surface    = "#232336"
+primary    = "#2a2a40"
+accent     = "#cba6f7"
+text       = "#cdd6f4"
+text_muted = "#8b91b0"
+text_faint = "#585b70"
+border     = "#383850"
+link       = "#89b4fa"
+heading    = "#cba6f7"
+code_bg    = "#2a2a40"
+
+[fonts]
+family       = "Consolas"
+size_base    = 13
+size_small   = 11
+size_heading = 18

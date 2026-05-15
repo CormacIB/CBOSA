@@ -18,14 +18,17 @@ from cbosa.ui.main_window import MainWindow
 from cbosa.modules.canvas_store import CanvasStore
 from cbosa.modules.capture_engine import CaptureEngine
 from cbosa.modules.email_store import EmailStore
+from cbosa.core.task_store import TaskStore
 from cbosa.ui.panels import default_registry
 from cbosa.ui.panels.canvas_panel import CanvasPanel
 from cbosa.ui.panels.capture_panel import CapturePanel
 from cbosa.ui.panels.email_panel import EmailPanel
 from cbosa.ui.panels.finance_panel import FinancePanel
+from cbosa.ui.panels.finance_summary_panel import FinanceSummaryPanel
 from cbosa.ui.panels.graph_view import GraphViewPanel
 from cbosa.ui.panels.note_browser import NoteBrowserPanel
 from cbosa.ui.panels.note_editor import NoteEditorPanel
+from cbosa.ui.panels.task_panel import TaskPanel
 
 
 def _register_panels(registry=None) -> bool:
@@ -86,6 +89,15 @@ def _register_panels(registry=None) -> bool:
     registry.register(
         "Finance",
         lambda title, parent: FinancePanel(ledger, title, parent, ai_service=ai_service),
+    )
+    registry.register(
+        "Finance Summary",
+        lambda title, parent: FinanceSummaryPanel(ledger, title, parent),
+    )
+    task_store = TaskStore(base_data_dir / "tasks.db")
+    registry.register(
+        "Tasks",
+        lambda title, parent: TaskPanel(task_store, title, parent),
     )
     email_db_path = base_data_dir / "email.db"
     email_store = EmailStore(email_db_path)

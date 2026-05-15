@@ -1,13 +1,11 @@
 """
-NoteEditorPanel — dockable raw Markdown editor panel.
+NoteEditorPanel — dockable Markdown editor with Edit / Preview / Split modes.
 
-[[wikilinks]] in the editor are styled as clickable links via WikilinkHighlighter.
-Click a wikilink to emit note_link_activated(target_name).
+Default mode is Preview: the note is rendered as styled HTML in a QTextEdit.
+Clicking Edit switches to the raw QPlainTextEdit. Split shows both side-by-side.
 
-When the cursor is not inside a [[wikilink]], the brackets are coloured to match
-the editor background — they become invisible — and only the link text is shown in
-the accent colour (Obsidian-style live preview).  Moving the cursor inside the
-wikilink reveals the brackets in a muted colour so the raw syntax is editable.
+[[wikilinks]] in the editor are styled via WikilinkHighlighter (Obsidian-style
+live preview: brackets invisible when cursor is away, visible when cursor is inside).
 """
 from __future__ import annotations
 
@@ -15,7 +13,7 @@ import re
 from urllib.parse import quote
 
 import mistune
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import (
     QColor,
     QKeySequence,
@@ -27,8 +25,9 @@ from PyQt6.QtGui import (
 from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
-    QPlainTextEdit,
     QPushButton,
+    QSplitter,
+    QPlainTextEdit,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -42,13 +41,122 @@ from cbosa.ui.panels import BasePanel
 
 _WIKILINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
 
+_MODE_EDIT = "edit"
+_MODE_PREVIEW = "preview"
+_MODE_SPLIT = "split"
+
 
 def _render_markdown(text: str) -> str:
-    """Convert Markdown (with [[wikilinks]]) to HTML."""
+    """Convert Markdown (with [[wikilinks]]) to an HTML fragment."""
     text = _WIKILINK_RE.sub(
         lambda m: f"[{m.group(1)}](note:///{quote(m.group(1))})", text
     )
     return mistune.html(text)
+
+
+def _build_preview_html(markdown_text: str, colors: dict, fonts: dict) -> str:
+    """Render markdown to a complete HTML document styled with theme colors."""
+    body = _render_markdown(markdown_text)
+
+    bg         = colors.get("background", "#1e1e2e")
+    surface    = colors.get("surface",    "#232336")
+    primary    = colors.get("primary",    "#2a2a40")
+    text       = colors.get("text",       "#cdd6f4")
+    text_muted = colors.get("text_muted", "#8b91b0")
+    accent     = colors.get("accent",     "#cba6f7")
+    link       = colors.get("link",       accent)
+    heading    = colors.get("heading",    accent)
+    code_bg    = colors.get("code_bg",    primary)
+    border     = colors.get("border",     "#383850")
+
+    family    = fonts.get("family",       "Inter")
+    size_base = fonts.get("size_base",    13)
+    size_h1   = fonts.get("size_heading", 18)
+    size_h2   = size_h1 - 2
+    size_h3   = size_h1 - 4
+
+    css = f"""
+body {{
+    background-color: {bg};
+    color: {text};
+    font-family: "{family}", system-ui, sans-serif;
+    font-size: {size_base}px;
+    line-height: 1.6;
+    padding: 14px 32px;
+    margin: 0;
+    max-width: 900px;
+}}
+h1 {{
+    color: {heading};
+    font-size: {size_h1}px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    margin: 18px 0 8px;
+}}
+h2 {{
+    color: {heading};
+    font-size: {size_h2}px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    margin: 14px 0 6px;
+}}
+h3, h4, h5, h6 {{
+    color: {heading};
+    font-size: {size_h3}px;
+    font-weight: 600;
+    margin: 12px 0 6px;
+}}
+p {{ margin: 8px 0; }}
+a {{ color: {link}; text-decoration: underline; }}
+code {{
+    background-color: {surface};
+    border: 1px solid {border};
+    color: {accent};
+    font-family: "JetBrains Mono", monospace;
+    font-size: {size_base - 1}px;
+    padding: 0 4px;
+}}
+pre {{
+    background-color: {surface};
+    border: 1px solid {border};
+    border-left: 2px solid {accent};
+    padding: 8px 12px;
+    overflow-x: auto;
+    margin: 8px 0;
+}}
+pre code {{
+    background-color: transparent;
+    border: none;
+    padding: 0;
+    color: {text};
+}}
+blockquote {{
+    border-left: 2px solid {accent};
+    color: {text_muted};
+    padding: 4px 0 4px 12px;
+    margin: 8px 0;
+}}
+hr {{
+    border: none;
+    border-top: 1px dashed {border};
+    margin: 10px 0;
+}}
+ul {{ margin: 6px 0; padding-left: 22px; }}
+ol {{ margin: 6px 0; padding-left: 22px; }}
+li {{ margin: 3px 0; }}
+table {{
+    border-collapse: collapse;
+    width: 100%;
+    font-size: {size_base}px;
+}}
+th, td {{
+    border: 1px solid {border};
+    padding: 4px 8px;
+    text-align: left;
+}}
+th {{ background-color: {surface}; color: {text_muted}; }}
+"""
+    return f"<html><head><style>{css}</style></head><body>{body}</body></html>"
 
 
 class WikilinkHighlighter(QSyntaxHighlighter):
@@ -79,16 +187,25 @@ class WikilinkHighlighter(QSyntaxHighlighter):
         self._link_fmt.setForeground(QColor(link_color))
         self._link_fmt.setFontUnderline(True)
 
-        # Brackets when cursor is NOT in this span — matches background → invisible
         self._bracket_hidden_fmt = QTextCharFormat()
         self._bracket_hidden_fmt.setForeground(QColor(bg_color))
 
-        # Brackets when cursor IS in this span — visible but muted
         self._bracket_active_fmt = QTextCharFormat()
         self._bracket_active_fmt.setForeground(QColor(bracket_active_color))
 
+    def update_colors(
+        self,
+        bg_color: str,
+        link_color: str,
+        bracket_active_color: str,
+    ) -> None:
+        """Update highlight colors and re-run highlighting (called on theme change)."""
+        self._bracket_hidden_fmt.setForeground(QColor(bg_color))
+        self._link_fmt.setForeground(QColor(link_color))
+        self._bracket_active_fmt.setForeground(QColor(bracket_active_color))
+        self.rehighlight()
+
     def set_cursor_position(self, block_number: int, pos_in_block: int) -> None:
-        """Update the cursor position and re-highlight if it changed."""
         if (
             self._cursor_block_number != block_number
             or self._cursor_pos_in_block != pos_in_block
@@ -107,19 +224,13 @@ class WikilinkHighlighter(QSyntaxHighlighter):
             bracket_fmt = (
                 self._bracket_active_fmt if cursor_in_span else self._bracket_hidden_fmt
             )
-            self.setFormat(m.start(), 2, bracket_fmt)                      # [[
-            self.setFormat(m.start(1), len(m.group(1)), self._link_fmt)    # text
-            self.setFormat(m.end(1), 2, bracket_fmt)                       # ]]
+            self.setFormat(m.start(), 2, bracket_fmt)
+            self.setFormat(m.start(1), len(m.group(1)), self._link_fmt)
+            self.setFormat(m.end(1), 2, bracket_fmt)
 
 
 class _WikiEditor(QPlainTextEdit):
-    """
-    QPlainTextEdit subclass that intercepts left-clicks on [[wikilinks]].
-
-    Monkey-patching viewport().mousePressEvent does not work in PyQt6 because
-    SIP dispatches virtual methods via the class, not the instance.  Subclassing
-    and overriding mousePressEvent is the only reliable way to intercept clicks.
-    """
+    """QPlainTextEdit that intercepts left-clicks on [[wikilinks]]."""
 
     link_clicked = pyqtSignal(str)
 
@@ -137,7 +248,7 @@ class _WikiEditor(QPlainTextEdit):
 
 class NoteEditorPanel(BasePanel):
     note_link_activated = pyqtSignal(str)
-    note_saved = pyqtSignal(str)  # emits note name after a successful save
+    note_saved = pyqtSignal(str)
 
     def __init__(
         self,
@@ -155,30 +266,60 @@ class NoteEditorPanel(BasePanel):
         self._ai = ai_service or NullAIService()
         self._current_note: str | None = None
         self._worker: AIWorker | None = None
+        self._mode = _MODE_PREVIEW
+        self._theme_colors: dict = {}
+        self._theme_fonts: dict = {}
+
+        self._load_current_theme()
 
         container = QWidget()
         layout = QVBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
-        # AI toolbar
-        toolbar = QWidget()
-        toolbar_layout = QHBoxLayout(toolbar)
-        toolbar_layout.setContentsMargins(4, 2, 4, 2)
-        self._summarize_btn = QPushButton("Summarize")
-        self._summarize_btn.setEnabled(False)
+        # ── Top bar ──────────────────────────────────────────────────────
+        top_bar = QWidget()
+        top_bar_layout = QHBoxLayout(top_bar)
+        top_bar_layout.setContentsMargins(6, 3, 6, 3)
+        top_bar_layout.setSpacing(4)
+
+        self._edit_btn    = QPushButton("edit")
+        self._preview_btn = QPushButton("preview")
+        self._split_btn   = QPushButton("split")
+        for btn in (self._edit_btn, self._preview_btn, self._split_btn):
+            btn.setCheckable(True)
+            btn.setProperty("role", "toggle")
+            btn.setFlat(True)
+
+        top_bar_layout.addWidget(self._edit_btn)
+        top_bar_layout.addWidget(self._preview_btn)
+        top_bar_layout.addWidget(self._split_btn)
+        top_bar_layout.addSpacing(12)
+
+        self._summarize_btn   = QPushButton("Summarize")
         self._connections_btn = QPushButton("Find Connections")
+        self._summarize_btn.setEnabled(False)
         self._connections_btn.setEnabled(False)
-        toolbar_layout.addWidget(self._summarize_btn)
-        toolbar_layout.addWidget(self._connections_btn)
-        toolbar_layout.addStretch()
-        layout.addWidget(toolbar)
+        top_bar_layout.addWidget(self._summarize_btn)
+        top_bar_layout.addWidget(self._connections_btn)
+        top_bar_layout.addStretch()
+        layout.addWidget(top_bar)
+
+        # ── Editor + Preview splitter ─────────────────────────────────────
+        self._splitter = QSplitter(Qt.Orientation.Horizontal)
 
         self._editor = _WikiEditor()
         self._editor.setPlaceholderText("Open a note to edit…")
         self._editor.link_clicked.connect(self.note_link_activated)
-        layout.addWidget(self._editor)
+        self._splitter.addWidget(self._editor)
 
-        # Label row (hidden until an AI action is triggered)
+        self._preview = QTextEdit()
+        self._preview.setReadOnly(True)
+        self._splitter.addWidget(self._preview)
+
+        layout.addWidget(self._splitter, stretch=1)
+
+        # ── AI output area ───────────────────────────────────────────────
         self._label_row = QWidget()
         label_row_layout = QHBoxLayout(self._label_row)
         label_row_layout.setContentsMargins(4, 2, 4, 2)
@@ -190,7 +331,6 @@ class NoteEditorPanel(BasePanel):
         self._label_row.setVisible(False)
         layout.addWidget(self._label_row)
 
-        # Output pane (hidden until an AI action is triggered)
         self._output_pane = QTextEdit()
         self._output_pane.setReadOnly(True)
         self._output_pane.setVisible(False)
@@ -198,18 +338,37 @@ class NoteEditorPanel(BasePanel):
 
         self.setWidget(container)
 
-        self._highlighter = WikilinkHighlighter(self._editor.document())
+        # ── Syntax highlighter ───────────────────────────────────────────
+        self._highlighter = WikilinkHighlighter(
+            self._editor.document(),
+            bg_color=self._theme_colors.get("background", "#1e1e2e"),
+            link_color=self._theme_colors.get(
+                "link", self._theme_colors.get("accent", "#89b4fa")
+            ),
+            bracket_active_color=self._theme_colors.get("text_muted", "#6c7086"),
+        )
         self._editor.cursorPositionChanged.connect(self._on_cursor_position_changed)
 
-        save_shortcut = QShortcut(QKeySequence("Ctrl+S"), self)
-        save_shortcut.activated.connect(self.save)
+        # ── Debounce timer for live preview ──────────────────────────────
+        self._preview_timer = QTimer()
+        self._preview_timer.setSingleShot(True)
+        self._preview_timer.setInterval(200)
+        self._preview_timer.timeout.connect(self._refresh_preview)
+        self._editor.textChanged.connect(self._preview_timer.start)
 
+        # ── Shortcuts ────────────────────────────────────────────────────
+        QShortcut(QKeySequence("Ctrl+S"), self).activated.connect(self.save)
+        QShortcut(QKeySequence("Ctrl+Shift+S"), self).activated.connect(self._on_summarize)
+
+        # ── Button wiring ────────────────────────────────────────────────
+        self._edit_btn.clicked.connect(lambda: self._set_mode(_MODE_EDIT))
+        self._preview_btn.clicked.connect(lambda: self._set_mode(_MODE_PREVIEW))
+        self._split_btn.clicked.connect(lambda: self._set_mode(_MODE_SPLIT))
         self._summarize_btn.clicked.connect(self._on_summarize)
         self._connections_btn.clicked.connect(self._on_find_connections)
         self._dismiss_btn.clicked.connect(self._dismiss_output)
 
-        summarize_shortcut = QShortcut(QKeySequence("Ctrl+Shift+S"), self)
-        summarize_shortcut.activated.connect(self._on_summarize)
+        self._set_mode(_MODE_PREVIEW)
 
     # ------------------------------------------------------------------
     # Public
@@ -232,6 +391,7 @@ class NoteEditorPanel(BasePanel):
         self._summarize_btn.setEnabled(True)
         self._connections_btn.setEnabled(True)
         self._dismiss_output()
+        self._refresh_preview()
 
     def save(self) -> None:
         if self._current_note is None:
@@ -244,52 +404,76 @@ class NoteEditorPanel(BasePanel):
         if self._current_note == name:
             self._current_note = None
             self._editor.clear()
+            self._preview.clear()
 
-    def _extract_wikilink_at_cursor(self, cursor: QTextCursor) -> str | None:
-        """Return the wikilink target name if the cursor sits inside [[name]], else None."""
-        block_text = cursor.block().text()
-        pos_in_block = cursor.positionInBlock()
-        for m in _WIKILINK_RE.finditer(block_text):
-            if m.start() <= pos_in_block <= m.end():
-                return m.group(1)
-        return None
-
-    def _activate_wikilink_at_cursor(self, cursor: QTextCursor) -> None:
-        """Emit note_link_activated if the cursor is on a wikilink."""
-        target = self._extract_wikilink_at_cursor(cursor)
-        if target is not None:
-            self.note_link_activated.emit(target)
+    def update_theme(self, theme_path: str) -> None:
+        """Called by MainWindow when the user switches themes."""
+        from cbosa.ui.theme_engine import ThemeEngine, ThemeLoadError
+        try:
+            self._theme_colors, self._theme_fonts = (
+                ThemeEngine().get_colors_and_fonts(theme_path)
+            )
+        except ThemeLoadError:
+            return
+        self._highlighter.update_colors(
+            bg_color=self._theme_colors.get("background", "#1e1e2e"),
+            link_color=self._theme_colors.get(
+                "link", self._theme_colors.get("accent", "#89b4fa")
+            ),
+            bracket_active_color=self._theme_colors.get("text_muted", "#6c7086"),
+        )
+        self._refresh_preview()
 
     # ------------------------------------------------------------------
     # Private
     # ------------------------------------------------------------------
 
+    def _load_current_theme(self) -> None:
+        from cbosa import config
+        from cbosa.ui.theme_engine import ThemeEngine, ThemeLoadError
+        theme_path = str(config.resolve("theme", "themes/obsidian_dark.toml"))
+        try:
+            self._theme_colors, self._theme_fonts = (
+                ThemeEngine().get_colors_and_fonts(theme_path)
+            )
+        except ThemeLoadError:
+            self._theme_colors = {}
+            self._theme_fonts = {}
+
     def _resolve(self, name: str) -> tuple[NoteStore, str]:
-        """Return (store, bare_name) — routes daily/ names to the daily store."""
         if name.startswith("daily/") and self._daily_store is not None:
             return self._daily_store, name[len("daily/"):]
         return self._store, name
 
+    def _set_mode(self, mode: str) -> None:
+        self._mode = mode
+        self._edit_btn.setChecked(mode == _MODE_EDIT)
+        self._preview_btn.setChecked(mode == _MODE_PREVIEW)
+        self._split_btn.setChecked(mode == _MODE_SPLIT)
+
+        if mode == _MODE_EDIT:
+            self._splitter.setSizes([1, 0])
+        elif mode == _MODE_PREVIEW:
+            self._splitter.setSizes([0, 1])
+            self._refresh_preview()
+        elif mode == _MODE_SPLIT:
+            half = max(self._splitter.width() // 2, 200)
+            self._splitter.setSizes([half, half])
+            self._refresh_preview()
+
+    def _refresh_preview(self) -> None:
+        if self._mode == _MODE_EDIT:
+            return
+        html = _build_preview_html(
+            self._editor.toPlainText(), self._theme_colors, self._theme_fonts
+        )
+        self._preview.setHtml(html)
+
     def _on_cursor_position_changed(self) -> None:
-        """Notify the highlighter so it can show/hide brackets around the active wikilink."""
         cursor = self._editor.textCursor()
         self._highlighter.set_cursor_position(
             cursor.blockNumber(), cursor.positionInBlock()
         )
-
-    def _same_wikilink_span(
-        self, c1: QTextCursor, c2: QTextCursor
-    ) -> bool:
-        """Return True if both cursors fall inside the same [[wikilink]] span."""
-        if c1.block() != c2.block():
-            return False
-        block_text = c1.block().text()
-        p1 = c1.positionInBlock()
-        p2 = c2.positionInBlock()
-        for m in _WIKILINK_RE.finditer(block_text):
-            if m.start() <= p1 <= m.end() and m.start() <= p2 <= m.end():
-                return True
-        return False
 
     # ------------------------------------------------------------------
     # AI toolbar actions
@@ -303,9 +487,8 @@ class NoteEditorPanel(BasePanel):
             note = store.read(bare_name)
         except NoteNotFoundError:
             return
-        text = note.content
         self._show_output("Summary")
-        self._start_worker(lambda: self._ai.summarize(text))
+        self._start_worker(lambda: self._ai.summarize(note.content))
 
     def _on_find_connections(self) -> None:
         if self._current_note is None:
@@ -315,8 +498,7 @@ class NoteEditorPanel(BasePanel):
         for name in self._store.all_names():
             try:
                 note = self._store.read(name)
-                words = note.content.split()
-                snippet = " ".join(words[:75])
+                snippet = " ".join(note.content.split()[:75])
             except Exception:
                 snippet = ""
             all_notes.append((name, snippet))
@@ -342,4 +524,3 @@ class NoteEditorPanel(BasePanel):
             lambda msg: self._output_pane.setPlainText(f"Error: {msg}")
         )
         self._worker.start()
-
