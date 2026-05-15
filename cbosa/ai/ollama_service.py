@@ -83,16 +83,19 @@ class OllamaAIService(AIService):
             candidate_lines = []
             for name in candidates:
                 snippet = snippet_map.get(str(name), "")
-                if snippet:
-                    candidate_lines.append(f'"{name}": {snippet}')
-                else:
-                    candidate_lines.append(f'"{name}"')
+                # Skip notes with too little content to judge relevance
+                if len(snippet.split()) < 20:
+                    continue
+                candidate_lines.append(f'"{name}": {snippet}')
+            if not candidate_lines:
+                return []
             candidates_text = "\n".join(candidate_lines)
             prompt = (
                 f"You are helping find notes related to '{note_id}'.\n"
                 f"Here are candidate notes with brief excerpts:\n{candidates_text}\n\n"
-                "Return only the names of notes that are genuinely related, one name per line, "
-                "with no explanation, punctuation, or extra text."
+                "Return only the names of notes you are confident are genuinely related "
+                "based on their content. If none are clearly related, return nothing. "
+                "One name per line, no explanation, no punctuation."
             )
         else:
             prompt = (

@@ -104,7 +104,7 @@ for name in all_names:
     try:
         n = store.read(name)
         words = n.content.split()
-        snippet = " ".join(words[:50])
+        snippet = " ".join(words[:75])
     except Exception:
         snippet = ""
     all_notes_with_snippets.append((name, snippet))

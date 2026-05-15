@@ -316,7 +316,7 @@ class NoteEditorPanel(BasePanel):
             try:
                 note = self._store.read(name)
                 words = note.content.split()
-                snippet = " ".join(words[:50])
+                snippet = " ".join(words[:75])
             except Exception:
                 snippet = ""
             all_notes.append((name, snippet))
