@@ -110,12 +110,11 @@ Single-clicking a panel type does nothing visible — users must double-click or
 
 ---
 
-### KI-3: Finance / Email / Canvas panels are empty `BasePanel` stubs
-**Area:** `cbosa/app.py` → `_register_panels()`
+### ~~KI-3: Finance / Email / Canvas panels are empty `BasePanel` stubs~~ — PARTIALLY FIXED
 
-`Ctrl+P` lists Finance, Email, and Canvas, but they open blank panels with no content. Real implementations come in Issues #8–#10.
+Finance panel (`FinanceSummaryPanel`) is now implemented with a QPainter-based bar chart, period selector, and budget tracking. Email and Canvas panels remain stubs pending Issues #9–#10.
 
-**Fix:** Replace each `BasePanel` entry in `_register_panels()` with the concrete class as each issue is completed.
+**Chart note:** `FinanceSummaryPanel` uses a custom `QPainter` `QWidget` — not pyqtgraph — for the bar chart. Bar width is fixed in pixels; slot width uses `min(MAX_SLOT_PX, chart_w / n)` so bars are always compact and all n bars always fit the visible panel width.
 
 ---
 
