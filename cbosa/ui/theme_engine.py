@@ -6,7 +6,28 @@ Public interface:
     ThemeEngine().apply(app: QApplication, path: str) -> None
     ThemeLoadError — raised for missing or malformed theme files
 """
+import platform
 import toml
+
+
+def _default_font() -> str:
+    """Return the best available UI font name for the current platform."""
+    s = platform.system()
+    if s == "Darwin":
+        return "SF Pro Text"
+    if s == "Linux":
+        return "DejaVu Sans"
+    return "Segoe UI"
+
+
+def _default_mono_font() -> str:
+    """Return the best available monospace font name for the current platform."""
+    s = platform.system()
+    if s == "Darwin":
+        return "Menlo"
+    if s == "Linux":
+        return "DejaVu Sans Mono"
+    return "Consolas"
 
 
 class ThemeLoadError(Exception):
@@ -44,7 +65,7 @@ class ThemeEngine:
         from PyQt6.QtGui import QFont
         app.setStyle(QStyleFactory.create("Windows"))
         colors, fonts = self._parse_theme(theme_path)
-        family    = fonts.get("family",    "Segoe UI")
+        family    = fonts.get("family",    _default_font())
         size_base = fonts.get("size_base", 13)
         # QSS is applied first — it controls per-widget font sizes (e.g. menus
         # at size_small).  app.setFont() then sets the application-level
@@ -118,10 +139,6 @@ class ThemeEngine:
         p.setColor(QPalette.ColorRole.Midlight,        surface)
         return p
 
-    # ------------------------------------------------------------------
-    # Private
-    # ------------------------------------------------------------------
-
     def _build_qss(self, colors: dict, fonts: dict) -> str:
         bg         = colors.get("background", "#000000")
         surface    = colors.get("surface",    "#111111")
@@ -133,7 +150,7 @@ class ThemeEngine:
         border     = colors.get("border",     "#333333")
         link       = colors.get("link",       accent)
 
-        family       = fonts.get("family",       "sans-serif")
+        family       = fonts.get("family",       _default_font())
         size_base    = fonts.get("size_base",    13)
         size_small   = fonts.get("size_small",   11)
         size_heading = fonts.get("size_heading", 16)
@@ -562,7 +579,7 @@ QWidget#banner_widget {{
 
 QLabel#banner_art {{
     color: {accent};
-    font-family: "Consolas", "Courier New", monospace;
+    font-family: "{_default_mono_font()}";
     font-size: 9px;
     background: transparent;
     padding: 2px 0;
