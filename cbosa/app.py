@@ -2,8 +2,10 @@
 CBOSA application bootstrap.
 Creates the QApplication, loads the theme, and launches the main window.
 """
+import platform
 import sys
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtCore import QEvent
+from PyQt6.QtWidgets import QApplication, QMainWindow
 
 from cbosa import config
 from cbosa.ai import NullAIService
@@ -122,19 +124,39 @@ def _register_panels(registry=None) -> bool:
     return ai_available
 
 
+class _CBOSAApp(QApplication):
+    """QApplication subclass that handles macOS dock-icon clicks."""
+
+    def event(self, e: QEvent) -> bool:
+        # On macOS, clicking the dock icon while no windows are visible sends
+        # ApplicationActivate. Re-show the first hidden MainWindow so the app
+        # behaves like a native Mac citizen.
+        if e.type() == QEvent.Type.ApplicationActivate:
+            for w in self.topLevelWidgets():
+                if isinstance(w, QMainWindow) and not w.isVisible():
+                    w.show()
+                    w.raise_()
+                    w.activateWindow()
+                    break
+        return super().event(e)
+
+
 def create_app(argv=None) -> QApplication:
     """Create and configure the QApplication instance."""
     if argv is None:
         argv = sys.argv
-    app = QApplication(argv)
+    app = _CBOSAApp(argv)
     app.setApplicationName("CBOSA")
     app.setOrganizationName("CBOSA")
+    # On macOS the app should stay alive after the last window is closed
+    # (dock icon remains); clicking it re-shows the window via _CBOSAApp.event.
+    if platform.system() == "Darwin":
+        app.setQuitOnLastWindowClosed(False)
     _apply_theme(app)
     return app
 
 
 def _apply_theme(app: QApplication) -> None:
-    theme_path = config.resolve("theme", "themes/dark_default.toml")
     theme_path = config.resolve("theme", "themes/dark_default.toml")
     engine = ThemeEngine()
     try:
