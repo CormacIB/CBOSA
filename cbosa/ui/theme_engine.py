@@ -7,14 +7,47 @@ Public interface:
     ThemeLoadError — raised for missing or malformed theme files
 """
 import platform
+from pathlib import Path
 import toml
+import logging
+logging.basicConfig(level=logging.DEBUG)
+
+
+# Fonts directory: place .ttf/.otf files here to make them available on all platforms.
+_FONTS_DIR = Path(__file__).parent.parent / "resources" / "fonts"
+
+
+def _load_bundled_fonts() -> None:
+    """Load any .ttf/.otf files from cbosa/resources/fonts/ into QFontDatabase."""
+    import logging
+    from PyQt6.QtGui import QFontDatabase
+    if not _FONTS_DIR.is_dir():
+        return
+    for ext in ("*.ttf", "*.otf"):
+        for font_file in _FONTS_DIR.glob(ext):
+            font_id = QFontDatabase.addApplicationFont(str(font_file))
+            if font_id == -1:
+                logging.warning("ThemeEngine: failed to load font %s", font_file.name)
+            else:
+                families = QFontDatabase.applicationFontFamilies(font_id)
+                logging.debug("ThemeEngine: loaded font %s → families %s", font_file.name, families)
+
+
+def _resolve_font_family(requested: str, fallback: str) -> str:
+    """Return *requested* if available in QFontDatabase, otherwise *fallback*."""
+    from PyQt6.QtGui import QFontDatabase
+    if requested in QFontDatabase.families():
+        return requested
+    return fallback
 
 
 def _default_font() -> str:
     """Return the best available UI font name for the current platform."""
     s = platform.system()
     if s == "Darwin":
-        return "SF Pro Text"
+        # SF Pro Text is restricted by Apple and not exposed in QFontDatabase;
+        # Helvetica Neue is always present and Qt can find it by name.
+        return "Helvetica Neue"
     if s == "Linux":
         return "DejaVu Sans"
     return "Segoe UI"
@@ -64,9 +97,17 @@ class ThemeEngine:
         from PyQt6.QtWidgets import QStyleFactory
         from PyQt6.QtGui import QFont
         app.setStyle(QStyleFactory.create("Windows"))
+        # Load any bundled fonts before parsing the theme so that font names
+        # declared in the TOML are resolvable on all platforms.
+        _load_bundled_fonts()
         colors, fonts = self._parse_theme(theme_path)
-        family    = fonts.get("family",    _default_font())
+        requested = fonts.get("family", _default_font())
+        family    = _resolve_font_family(requested, _default_font())
         size_base = fonts.get("size_base", 13)
+        # Substitute the resolved family back so _build_qss uses the right name.
+        if family != requested:
+            fonts = dict(fonts)
+            fonts["family"] = family
         # QSS is applied first — it controls per-widget font sizes (e.g. menus
         # at size_small).  app.setFont() then sets the application-level
         # default for any widget not explicitly covered by a QSS rule.

@@ -1,18 +1,22 @@
 """
-BannerWidget — fixed top bar with ASCII art logo and system info.
+BannerWidget — fixed top bar with pixel art logo and system info.
 
 Layout:
-  [ username · theme ]     [ CBOSA ASCII ART ]     [ Thu 2026-05-15  14:32:07 ]
+  [ username · theme ]     [ pixel art / ASCII art ]     [ Thu 2026-05-15  14:32:07 ]
 """
 from __future__ import annotations
 
 import os
 from datetime import datetime
+from pathlib import Path
 
 from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import QHBoxLayout, QLabel, QWidget
 
 from cbosa import config
+
+_BANNER_IMAGE = Path(__file__).parent.parent / "resources" / "banner.png"
 
 _ASCII_ART = r"""
   ██████╗██████╗  ██████╗ ███████╗ █████╗
@@ -55,9 +59,17 @@ class BannerWidget(QWidget):
         self._meta_label.setObjectName("banner_meta")
         self._meta_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
-        art_label = QLabel(_ASCII_ART)
+        art_label = QLabel()
         art_label.setObjectName("banner_art")
         art_label.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
+        if _BANNER_IMAGE.is_file():
+            pixmap = QPixmap(str(_BANNER_IMAGE))
+            # Scale to banner height while keeping aspect ratio.
+            # FastTransformation = nearest-neighbor, preserves crisp pixel edges.
+            pixmap = pixmap.scaledToHeight(48, Qt.TransformationMode.FastTransformation)
+            art_label.setPixmap(pixmap)
+        else:
+            art_label.setText(_ASCII_ART)
 
         self._clock_label = QLabel()
         self._clock_label.setObjectName("banner_clock")

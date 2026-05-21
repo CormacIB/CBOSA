@@ -14,7 +14,7 @@ heading    = "#b3361b"
 code_bg    = "#e8e2d2"
 
 [fonts]
-family       = "Consolas"
+family       = "JetBrains Mono"
 size_base    = 13
 size_small   = 11
 size_heading = 18
