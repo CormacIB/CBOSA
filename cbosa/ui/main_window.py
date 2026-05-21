@@ -204,10 +204,16 @@ class MainWindow(QMainWindow):
                 panel.note_deleted.connect(editor.clear_if_current)
         if name == "Note Editor":
             panel.note_link_activated.connect(self._on_note_selected)
+            panel.ask_ai_requested.connect(self._on_ask_ai)
             self.theme_changed.connect(panel.update_theme)
             graph = self._panel_instances.get("Graph View")
             if graph is not None:
                 panel.note_saved.connect(lambda _: graph.refresh())
+        if name == "Chat":
+            editor = self._panel_instances.get("Note Editor")
+            if editor is not None:
+                editor.ask_ai_requested.connect(panel.set_note_context)
+            self.theme_changed.connect(panel.update_theme)
         if name == "Graph View":
             panel.node_clicked.connect(self._on_note_selected)
             editor = self._panel_instances.get("Note Editor")
@@ -215,6 +221,13 @@ class MainWindow(QMainWindow):
                 editor.note_saved.connect(lambda _: panel.refresh())
         if name == "Finance Summary":
             self.theme_changed.connect(panel.update_theme)
+
+    def _on_ask_ai(self, title: str, content: str) -> None:
+        if "Chat" not in self._panel_instances:
+            self.add_panel("Chat")
+        chat = self._panel_instances.get("Chat")
+        if chat is not None:
+            chat.set_note_context(title, content)
 
     def _on_note_selected(self, note_name: str) -> None:
         if "Note Editor" not in self._panel_instances:

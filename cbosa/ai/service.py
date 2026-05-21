@@ -37,6 +37,16 @@ class AIService(ABC):
     def answer(self, query: str, context: list[str]) -> str:
         """Answer *query* given *context* snippets, or '' if unavailable."""
 
+    @abstractmethod
+    def chat(self, messages: list[dict], context: list[str] = []) -> str:
+        """Multi-turn chat. messages is list of {role, content} dicts.
+        context snippets are injected into the final user turn."""
+
+    def context_info(self) -> dict:
+        """Return display info about the backend: model name and context window size.
+        Returns {} if the backend doesn't expose this (e.g. NullAIService)."""
+        return {}
+
 
 class NullAIService(AIService):
     """No-op stub — returns empty values for every method.
@@ -61,4 +71,7 @@ class NullAIService(AIService):
         return []
 
     def answer(self, query: str, context: list[str]) -> str:
+        return ""
+
+    def chat(self, messages: list[dict], context: list[str] = []) -> str:
         return ""

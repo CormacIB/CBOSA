@@ -1,7 +1,7 @@
 """
 OllamaAIService — AIService implementation backed by a locally-running Ollama instance.
 
-Communicates via httpx blocking HTTP calls (POST /api/generate).
+Communicates via httpx blocking HTTP calls (POST /api/chat).
 All methods return empty defaults on any network error or non-200 response
 without raising. find_connections() pre-filters candidates via SearchIndex FTS5
 (top 15 results) when a search_index is supplied.
@@ -18,6 +18,12 @@ from cbosa.ai.service import AIService
 
 # Words per chunk for map-reduce summarisation (~3 300 tokens, safe within 8 k ctx)
 _CHUNK_WORDS = 2500
+
+_SYSTEM_PROMPT = (
+    "You are a helpful, precise assistant integrated into a personal knowledge "
+    "management system. Answer concisely and accurately. When given context from "
+    "notes, ground your answers in that context."
+)
 
 
 class OllamaAIService(AIService):
@@ -43,19 +49,17 @@ class OllamaAIService(AIService):
 
     def summarize(self, text: str) -> str:
         if len(text.split()) <= _CHUNK_WORDS:
-            return self._generate(f"Summarize the following text concisely:\n\n{text}")
+            return self._chat([{"role": "user", "content": f"Summarize the following text concisely:\n\n{text}"}])
         # Long text: map-reduce — summarise each chunk, then combine
         chunk_summaries = []
         for chunk in self._chunk_text(text):
-            s = self._generate(f"Summarize this section concisely in 2-3 sentences:\n\n{chunk}")
+            s = self._chat([{"role": "user", "content": f"Summarize this section concisely in 2-3 sentences:\n\n{chunk}"}])
             if s:
                 chunk_summaries.append(s)
         if not chunk_summaries:
             return ""
         combined = "\n\n".join(chunk_summaries)
-        return self._generate(
-            f"Combine these section summaries into one cohesive paragraph:\n\n{combined}"
-        )
+        return self._chat([{"role": "user", "content": f"Combine these section summaries into one cohesive paragraph:\n\n{combined}"}])
 
     def embed(self, text: str) -> list[float]:
         return []
@@ -104,7 +108,7 @@ class OllamaAIService(AIService):
                 "Return only the names of related notes, one per line."
             )
 
-        response = self._generate(prompt)
+        response = self._chat([{"role": "user", "content": prompt}])
         if not response:
             return []
         return [line.strip() for line in response.splitlines() if line.strip()]
@@ -116,7 +120,7 @@ class OllamaAIService(AIService):
             "Do not include any introduction, preamble, or bullet characters. "
             "Output only the tasks, nothing else:\n\n" + text
         )
-        response = self._generate(prompt)
+        response = self._chat([{"role": "user", "content": prompt}])
         if not response:
             return []
         tasks = []
@@ -138,7 +142,7 @@ class OllamaAIService(AIService):
             "Return one concise point per line, starting each line with '- ':\n\n"
             + working_text
         )
-        response = self._generate(prompt)
+        response = self._chat([{"role": "user", "content": prompt}])
         if not response:
             return []
         return [
@@ -150,7 +154,20 @@ class OllamaAIService(AIService):
     def answer(self, query: str, context: list[str]) -> str:
         context_text = "\n\n".join(context)
         prompt = f"Context:\n{context_text}\n\nQuestion: {query}\nAnswer:"
-        return self._generate(prompt)
+        return self._chat([{"role": "user", "content": prompt}])
+
+    def context_info(self) -> dict:
+        return {"model": self._model, "num_ctx": self._num_ctx}
+
+    def chat(self, messages: list[dict], context: list[str] = []) -> str:
+        msgs = list(messages)
+        if context and msgs and msgs[-1]["role"] == "user":
+            context_block = "\n\n".join(context)
+            msgs[-1] = {
+                "role": "user",
+                "content": f"Context:\n{context_block}\n\n{msgs[-1]['content']}",
+            }
+        return self._chat(msgs)
 
     # ------------------------------------------------------------------
     # Private
@@ -160,12 +177,14 @@ class OllamaAIService(AIService):
         words = text.split()
         return [" ".join(words[i: i + max_words]) for i in range(0, len(words), max_words)]
 
-    def _generate(self, prompt: str) -> str:
-        """POST to Ollama /api/generate. Returns response text or '' on any error."""
-        url = f"{self._endpoint}/api/generate"
+    def _chat(self, messages: list[dict]) -> str:
+        """POST to Ollama /api/chat. Returns assistant content or '' on any error."""
+        url = f"{self._endpoint}/api/chat"
+        if not messages or messages[0].get("role") != "system":
+            messages = [{"role": "system", "content": _SYSTEM_PROMPT}] + messages
         payload = {
             "model": self._model,
-            "prompt": prompt,
+            "messages": messages,
             "stream": False,
             "options": {"num_ctx": self._num_ctx},
         }
@@ -175,13 +194,10 @@ class OllamaAIService(AIService):
             print(f"[OllamaAIService] HTTP error: {exc}", file=sys.stderr)
             return ""
         if resp.status_code != 200:
-            print(
-                f"[OllamaAIService] Non-200 response: {resp.status_code}",
-                file=sys.stderr,
-            )
+            print(f"[OllamaAIService] Non-200 response: {resp.status_code}", file=sys.stderr)
             return ""
         try:
-            return resp.json().get("response", "")
+            return resp.json().get("message", {}).get("content", "")
         except Exception as exc:
             print(f"[OllamaAIService] JSON parse error: {exc}", file=sys.stderr)
             return ""

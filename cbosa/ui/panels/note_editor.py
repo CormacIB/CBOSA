@@ -249,6 +249,7 @@ class _WikiEditor(QPlainTextEdit):
 class NoteEditorPanel(BasePanel):
     note_link_activated = pyqtSignal(str)
     note_saved = pyqtSignal(str)
+    ask_ai_requested = pyqtSignal(str, str)  # (note_title, note_content)
 
     def __init__(
         self,
@@ -298,10 +299,13 @@ class NoteEditorPanel(BasePanel):
 
         self._summarize_btn   = QPushButton("Summarize")
         self._connections_btn = QPushButton("Find Connections")
+        self._ask_ai_btn      = QPushButton("Ask AI")
         self._summarize_btn.setEnabled(False)
         self._connections_btn.setEnabled(False)
+        self._ask_ai_btn.setEnabled(False)
         top_bar_layout.addWidget(self._summarize_btn)
         top_bar_layout.addWidget(self._connections_btn)
+        top_bar_layout.addWidget(self._ask_ai_btn)
         top_bar_layout.addStretch()
         layout.addWidget(top_bar)
 
@@ -366,6 +370,7 @@ class NoteEditorPanel(BasePanel):
         self._split_btn.clicked.connect(lambda: self._set_mode(_MODE_SPLIT))
         self._summarize_btn.clicked.connect(self._on_summarize)
         self._connections_btn.clicked.connect(self._on_find_connections)
+        self._ask_ai_btn.clicked.connect(self._on_ask_ai)
         self._dismiss_btn.clicked.connect(self._dismiss_output)
 
         self._set_mode(_MODE_PREVIEW)
@@ -390,6 +395,7 @@ class NoteEditorPanel(BasePanel):
         self._editor.blockSignals(False)
         self._summarize_btn.setEnabled(True)
         self._connections_btn.setEnabled(True)
+        self._ask_ai_btn.setEnabled(True)
         self._dismiss_output()
         self._refresh_preview()
 
@@ -489,6 +495,16 @@ class NoteEditorPanel(BasePanel):
             return
         self._show_output("Summary")
         self._start_worker(lambda: self._ai.summarize(note.content))
+
+    def _on_ask_ai(self) -> None:
+        if self._current_note is None:
+            return
+        store, bare_name = self._resolve(self._current_note)
+        try:
+            note = store.read(bare_name)
+        except NoteNotFoundError:
+            return
+        self.ask_ai_requested.emit(self._current_note, note.content)
 
     def _on_find_connections(self) -> None:
         if self._current_note is None:

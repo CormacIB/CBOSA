@@ -38,3 +38,13 @@ class SearchIndex:
             (query,),
         )
         return [row[0] for row in cur.fetchall()]
+
+    def search_snippets(self, query: str, limit: int = 6) -> list[tuple[str, str]]:
+        """Return (name, excerpt) pairs for the top *limit* notes matching query.
+        Uses FTS5 snippet() to extract the most relevant ~25-token passage from each note."""
+        cur = self._conn.execute(
+            "SELECT name, snippet(notes_fts, 1, '', '', '...', 25) "
+            "FROM notes_fts WHERE notes_fts MATCH ? ORDER BY rank LIMIT ?",
+            (query, limit),
+        )
+        return cur.fetchall()

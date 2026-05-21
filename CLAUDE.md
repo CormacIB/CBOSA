@@ -25,13 +25,25 @@ cbosa/
       note_editor.py  # NoteEditorPanel — QPlainTextEdit + QWebEngineView preview
       finance_summary_panel.py  # FinanceSummaryPanel — QPainter bar chart (category × cost)
       task_panel.py   # TaskPanel — task list view
+      chat_panel.py   # ChatPanel — multi-turn AI chat; Note/Vault context toggle;
+                      #   note picker combobox; inline context provenance; ctx-window footer
   core/
     note_store.py     # NoteStore — CRUD on .md files with YAML frontmatter
     link_index.py     # LinkIndex — bidirectional [[wikilink]] map
     tag_index.py      # TagIndex — #tag → notes map
-    search_index.py   # SearchIndex — SQLite FTS5 full-text search
+    search_index.py   # SearchIndex — SQLite FTS5 full-text search.
+                      #   search(query) -> list[str] (names only)
+                      #   search_snippets(query, limit=6) -> list[tuple[str,str]] (name, excerpt)
     task_store.py     # TaskStore — task persistence
-  ai/                 # AIService ABC + NullAIService (stub, no-op)
+  ai/
+    service.py        # AIService ABC + NullAIService. Methods: summarize, embed,
+                      #   find_connections, extract_tasks, key_points, answer,
+                      #   chat(messages, context=[]), context_info() -> dict
+    ollama_service.py # OllamaAIService — POST /api/chat (NOT /api/generate).
+                      #   Prepends _SYSTEM_PROMPT as system message automatically.
+                      #   context_info() returns {model, num_ctx} from config.
+    worker.py         # AIWorker — QThread wrapper; emits result_ready(str) / error(str)
+    chat_session.py   # ChatSession dataclass — holds messages list for multi-turn chat
   modules/            # Future: Email, Canvas
 tests/
   conftest.py
@@ -52,11 +64,13 @@ data/
 
 ## Key conventions
 
-- **Theming:** All colors and fonts come from a TOML theme file (`[colors]` + `[fonts]`). Never hardcode colors in Python or QSS outside the theme engine. Swapping themes = changing `theme` in `cbosa.toml` and restarting.
+- **Theming:** All colors and fonts come from a TOML theme file (`[colors]` + `[fonts]`). Never hardcode colors in Python or QSS outside the theme engine — including inside HTML strings rendered in QTextEdit widgets (read from `_theme_colors` dict instead). Swapping themes = changing `theme` in `cbosa.toml` and restarting. The macOS font fallback in `theme_engine.py` is `"Helvetica Neue"` — `"SF Pro Text"` is not exposed in Qt's font database on macOS.
 - **Panels:** Every panel extends `BasePanel`. Panels are registered in `app.py::_register_panels()`. Opening a panel goes through `PanelRegistry`.
 - **Note data flow:** `NoteStore` is the only writer to `.md` files. Indexes (`LinkIndex`, `TagIndex`, `SearchIndex`) are built from `NoteStore` on startup and must be explicitly `rebuild()`-ed after in-app edits (external edits are not yet watched — see KI-1).
 - **Secrets:** IMAP credentials and Canvas API token go in `~/.cbosa/secrets.toml` — never in code or `cbosa.toml`. Missing secrets → graceful "configure credentials" prompt.
-- **Background work:** IMAP sync and Canvas sync must run in `QThread` workers, not the main thread.
+- **Background work:** IMAP sync and Canvas sync must run in `QThread` workers, not the main thread. All AI calls go through `AIWorker` (same pattern).
+- **AI backend:** `OllamaAIService` uses `/api/chat` (not `/api/generate`). It auto-prepends a system prompt. Configure via `[ai]` in `cbosa.toml`: `backend = "ollama"`, `endpoint`, `model`, `num_ctx`. Hermes models (e.g. `hermes3`) work well. The `ChatPanel` requires `ai_service`, `search_index`, and `note_store` — all passed from `app.py::_register_panels()`.
+- **Banner:** Loads pixel art from `cbosa/resources/banner.png` if present (scaled to 48px height with nearest-neighbor). Falls back to Unicode block art string if file is missing.
 - **Tests:** Use `pytest`. Test behavior through public interfaces — no mocking Qt widgets. `NoteStore`/indexes use temp dirs and in-memory SQLite. `CanvasApiClient`/`TaskExtractor` mock at the `httpx` transport layer.
 
 ---
@@ -87,6 +101,7 @@ GitHub repo: CormacIB/CBOSA
 | 21 | OllamaAIService + [ai] config + availability warning | Done |
 | 22 | Note Editor AI toolbar + AIWorker | Done |
 | 23 | Email panel redesign — Action Items tab + AI task extraction | Done |
+| 24 | Hermes/Ollama chat integration — /api/chat migration + ChatPanel | Done |
 
 ---
 
@@ -127,8 +142,14 @@ Finance panel (`FinanceSummaryPanel`) is now implemented with a QPainter-based b
 ## Config file (`cbosa.toml` — project root)
 
 ```toml
-theme = "themes/dark_default.toml"   # path to active theme TOML
+theme = "themes/light.toml"          # currently active theme (light)
 data_dir = "data"                     # root for notes/, daily/, captures/
+
+[ai]
+backend  = "ollama"
+endpoint = "http://localhost:11434"
+model    = "hermes3"                  # or any Ollama model name
+num_ctx  = 8192
 ```
 
 ## Theme TOML schema

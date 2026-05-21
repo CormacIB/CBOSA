@@ -21,6 +21,7 @@ from cbosa.modules.email_store import EmailStore
 from cbosa.core.task_store import TaskStore
 from cbosa.ui.panels import default_registry
 from cbosa.ui.panels.canvas_panel import CanvasPanel
+from cbosa.ui.panels.chat_panel import ChatPanel
 from cbosa.ui.panels.capture_panel import CapturePanel
 from cbosa.ui.panels.email_panel import EmailPanel
 from cbosa.ui.panels.finance_panel import FinancePanel
@@ -117,6 +118,10 @@ def _register_panels(registry=None) -> bool:
         lambda title, parent: CapturePanel(
             capture_engine, store, all_notes_store=store, title=title, parent=parent
         ),
+    )
+    registry.register(
+        "Chat",
+        lambda title, parent: ChatPanel(ai_service, search_index, store, title, parent),
     )
 
     return ai_available
