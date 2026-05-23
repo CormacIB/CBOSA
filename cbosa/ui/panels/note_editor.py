@@ -9,11 +9,12 @@ live preview: brackets invisible when cursor is away, visible when cursor is ins
 """
 from __future__ import annotations
 
+import functools
 import re
 from urllib.parse import quote
 
 import mistune
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import (
     QColor,
     QKeySequence,
@@ -22,6 +23,8 @@ from PyQt6.QtGui import (
     QTextCharFormat,
     QTextCursor,
 )
+from PyQt6.QtWebEngineCore import QWebEnginePage
+from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -40,18 +43,85 @@ from cbosa.core.note_store import NoteNotFoundError, NoteStore
 from cbosa.ui.panels import BasePanel
 
 _WIKILINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
+_MATH_DISPLAY_RE = re.compile(r'\$\$(.+?)\$\$', re.DOTALL)
+_MATH_INLINE_RE  = re.compile(r'(?<!\$)\$(?!\s)(.+?)(?<!\s)\$(?!\$)')
 
 _MODE_EDIT = "edit"
 _MODE_PREVIEW = "preview"
 _MODE_SPLIT = "split"
 
+_KATEX_CDN = "https://cdn.jsdelivr.net/npm/katex@0.16.11/dist"
+_KATEX_RENDER_CALL = (
+    "<script>renderMathInElement(document.body,{"
+    "delimiters:[{left:'$$',right:'$$',display:true},"
+    "{left:'$',right:'$',display:false}],"
+    "throwOnError:false});</script>"
+)
+
+
+@functools.lru_cache(maxsize=1)
+def _resolve_katex() -> tuple[str, str, str | None]:
+    """
+    Return (css_head, scripts_foot, base_dir_or_None).
+
+    css_head   — <link> tag for <head>
+    scripts_foot — <script> tags placed just before </body> so the DOM is
+                   already complete when renderMathInElement is called; no
+                   defer/onload needed, which is unreliable inside setHtml().
+    base_dir_or_None — local file:// base URL when using the bundled assets.
+    """
+    from cbosa import config
+    local = config.PROJECT_ROOT / "cbosa" / "resources" / "katex"
+    if local.is_dir() and (local / "katex.min.js").exists():
+        css  = '<link rel="stylesheet" href="katex.min.css">'
+        foot = (
+            '<script src="katex.min.js"></script>'
+            '<script src="contrib/auto-render.min.js"></script>'
+            + _KATEX_RENDER_CALL
+        )
+        return css, foot, str(local) + "/"
+    css  = f'<link rel="stylesheet" href="{_KATEX_CDN}/katex.min.css">'
+    foot = (
+        f'<script src="{_KATEX_CDN}/katex.min.js"></script>'
+        f'<script src="{_KATEX_CDN}/contrib/auto-render.min.js"></script>'
+        + _KATEX_RENDER_CALL
+    )
+    return css, foot, None
+
+
+def _extract_math(text: str) -> tuple[str, list[tuple[str, str, bool]]]:
+    """Replace $$...$$ and $...$ with placeholders so mistune won't corrupt them."""
+    spans: list[tuple[str, str, bool]] = []
+
+    def sub_display(m: re.Match) -> str:
+        ph = f"ZZMD{len(spans)}ZZ"
+        spans.append((ph, m.group(1), True))
+        return ph
+
+    def sub_inline(m: re.Match) -> str:
+        ph = f"ZZMI{len(spans)}ZZ"
+        spans.append((ph, m.group(1), False))
+        return ph
+
+    text = _MATH_DISPLAY_RE.sub(sub_display, text)
+    text = _MATH_INLINE_RE.sub(sub_inline, text)
+    return text, spans
+
+
+def _restore_math(html: str, spans: list[tuple[str, str, bool]]) -> str:
+    for ph, content, display in spans:
+        html = html.replace(ph, f'$${content}$$' if display else f'${content}$')
+    return html
+
 
 def _render_markdown(text: str) -> str:
-    """Convert Markdown (with [[wikilinks]]) to an HTML fragment."""
+    """Convert Markdown (with [[wikilinks]] and $math$) to an HTML fragment."""
     text = _WIKILINK_RE.sub(
         lambda m: f"[{m.group(1)}](note:///{quote(m.group(1))})", text
     )
-    return mistune.html(text)
+    text, math_spans = _extract_math(text)
+    html = mistune.html(text)
+    return _restore_math(html, math_spans)
 
 
 def _build_preview_html(markdown_text: str, colors: dict, fonts: dict) -> str:
@@ -156,7 +226,30 @@ th, td {{
 }}
 th {{ background-color: {surface}; color: {text_muted}; }}
 """
-    return f"<html><head><style>{css}</style></head><body>{body}</body></html>"
+    katex_css, katex_foot, _ = _resolve_katex()
+    return (
+        f"<!DOCTYPE html><html><head><style>{css}</style>{katex_css}</head>"
+        f"<body>{body}{katex_foot}</body></html>"
+    )
+
+
+class _NotePage(QWebEnginePage):
+    """QWebEnginePage that intercepts note:/// navigation and blocks external URLs."""
+
+    note_link_clicked = pyqtSignal(str)
+
+    def acceptNavigationRequest(
+        self,
+        url: QUrl,
+        nav_type: "QWebEnginePage.NavigationType",
+        is_main_frame: bool,
+    ) -> bool:
+        if url.scheme() == "note":
+            self.note_link_clicked.emit(url.path().lstrip("/"))
+            return False
+        if nav_type == QWebEnginePage.NavigationType.NavigationTypeLinkClicked:
+            return False
+        return True
 
 
 class WikilinkHighlighter(QSyntaxHighlighter):
@@ -317,8 +410,10 @@ class NoteEditorPanel(BasePanel):
         self._editor.link_clicked.connect(self.note_link_activated)
         self._splitter.addWidget(self._editor)
 
-        self._preview = QTextEdit()
-        self._preview.setReadOnly(True)
+        self._preview_page = _NotePage(self)
+        self._preview_page.note_link_clicked.connect(self.note_link_activated)
+        self._preview = QWebEngineView()
+        self._preview.setPage(self._preview_page)
         self._splitter.addWidget(self._preview)
 
         layout.addWidget(self._splitter, stretch=1)
@@ -473,7 +568,9 @@ class NoteEditorPanel(BasePanel):
         html = _build_preview_html(
             self._editor.toPlainText(), self._theme_colors, self._theme_fonts
         )
-        self._preview.setHtml(html)
+        _, _2, base_path = _resolve_katex()
+        base_url = QUrl.fromLocalFile(base_path) if base_path else QUrl()
+        self._preview.setHtml(html, base_url)
 
     def _on_cursor_position_changed(self) -> None:
         cursor = self._editor.textCursor()

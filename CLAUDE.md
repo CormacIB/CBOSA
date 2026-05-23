@@ -22,7 +22,11 @@ cbosa/
     panels/
       __init__.py     # PanelRegistry, BasePanel
       note_browser.py # NoteBrowserPanel — folder tree + tag filter
-      note_editor.py  # NoteEditorPanel — QPlainTextEdit + QWebEngineView preview
+      note_editor.py  # NoteEditorPanel — QPlainTextEdit editor + QWebEngineView preview.
+                      #   Preview renders Markdown → HTML via mistune + KaTeX for math.
+                      #   Math delimiters: $...$ (inline), $$...$$ (display block).
+                      #   _extract_math()/_restore_math() protect delimiters from mistune
+                      #   before HTML is built; KaTeX scripts placed at end of <body>.
       finance_summary_panel.py  # FinanceSummaryPanel — QPainter bar chart (category × cost)
       task_panel.py   # TaskPanel — task list view
       chat_panel.py   # ChatPanel — multi-turn AI chat; Note/Vault context toggle;
@@ -45,6 +49,11 @@ cbosa/
     worker.py         # AIWorker — QThread wrapper; emits result_ready(str) / error(str)
     chat_session.py   # ChatSession dataclass — holds messages list for multi-turn chat
   modules/            # Future: Email, Canvas
+  resources/
+    katex/            # Bundled KaTeX assets (JS, CSS, fonts) for offline math rendering.
+                      #   Populated once by: python3 tools/fetch_katex.py
+                      #   If absent, _resolve_katex() falls back to jsDelivr CDN.
+    banner.png        # Optional pixel art banner (48 px height, nearest-neighbor scaled)
 tests/
   conftest.py
   test_note_engine.py
