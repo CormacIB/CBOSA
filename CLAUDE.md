@@ -73,7 +73,8 @@ data/
 
 ## Key conventions
 
-- **Theming:** All colors and fonts come from a TOML theme file (`[colors]` + `[fonts]`). Never hardcode colors in Python or QSS outside the theme engine — including inside HTML strings rendered in QTextEdit widgets (read from `_theme_colors` dict instead). Swapping themes = changing `theme` in `cbosa.toml` and restarting. The macOS font fallback in `theme_engine.py` is `"Helvetica Neue"` — `"SF Pro Text"` is not exposed in Qt's font database on macOS.
+- **Theming:** All colors and fonts come from a TOML theme file (`[colors]` + `[fonts]`). Never hardcode colors in Python or QSS outside the theme engine — including inside HTML strings rendered in `QWebEngineView`/`QTextEdit` widgets (read from `_theme_colors` dict instead). Swapping themes = changing `theme` in `cbosa.toml` and restarting. The macOS font fallback in `theme_engine.py` is `"Helvetica Neue"` — `"SF Pro Text"` is not exposed in Qt's font database on macOS.
+- **Math rendering:** The note preview (`QWebEngineView`) renders LaTeX via KaTeX. Use `$...$` for inline math and `$$...$$` for display blocks. Math spans are extracted before `mistune` runs (to prevent Markdown mangling) and restored as raw delimiters in the HTML; KaTeX's `auto-render` extension processes them at page load. KaTeX assets are bundled locally in `cbosa/resources/katex/` — see `tools/fetch_katex.py` to refresh them. The HTML must include `<!DOCTYPE html>` or KaTeX refuses to render (quirks mode guard).
 - **Panels:** Every panel extends `BasePanel`. Panels are registered in `app.py::_register_panels()`. Opening a panel goes through `PanelRegistry`.
 - **Note data flow:** `NoteStore` is the only writer to `.md` files. Indexes (`LinkIndex`, `TagIndex`, `SearchIndex`) are built from `NoteStore` on startup and must be explicitly `rebuild()`-ed after in-app edits (external edits are not yet watched — see KI-1).
 - **Secrets:** IMAP credentials and Canvas API token go in `~/.cbosa/secrets.toml` — never in code or `cbosa.toml`. Missing secrets → graceful "configure credentials" prompt.
@@ -84,7 +85,7 @@ data/
 
 ---
 
-## Issue status (as of 2026-05-15)
+## Issue status (as of 2026-05-23)
 
 GitHub repo: CormacIB/CBOSA
 
@@ -111,6 +112,7 @@ GitHub repo: CormacIB/CBOSA
 | 22 | Note Editor AI toolbar + AIWorker | Done |
 | 23 | Email panel redesign — Action Items tab + AI task extraction | Done |
 | 24 | Hermes/Ollama chat integration — /api/chat migration + ChatPanel | Done |
+| 25 | Inline LaTeX rendering — KaTeX in QWebEngineView note preview | Done |
 
 ---
 
@@ -187,6 +189,7 @@ size_heading = 18
 ```
 PyQt6>=6.7
 PyQt6Ads>=4.5.0       # Advanced Docking System — CDockManager, CDockWidget
+PyQt6-WebEngine>=6.7  # QWebEngineView for note preview (required for KaTeX math rendering)
 toml
 mistune>=3.0          # Markdown → HTML (note preview)
 python-frontmatter    # YAML frontmatter in .md files
@@ -198,6 +201,8 @@ networkx              # Graph layout (Issue #7)
 pyqtgraph             # Graph rendering (Issue #7)
 pytest
 ```
+
+KaTeX JS/CSS/fonts are **not** pip packages — run `python3 tools/fetch_katex.py` once after cloning to download them into `cbosa/resources/katex/`.
 
 Install: `pip install -r requirements.txt`
 
