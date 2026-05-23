@@ -46,6 +46,11 @@ _WIKILINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
 _MATH_DISPLAY_RE = re.compile(r'\$\$(.+?)\$\$', re.DOTALL)
 _MATH_INLINE_RE  = re.compile(r'(?<!\$)\$(?!\s)(.+?)(?<!\s)\$(?!\$)')
 
+# Matrix shorthands: \mat{a,b;c,d}  \bmat{...}  \vmat{...}
+# Commas = column separators, semicolons = row separators.
+_MAT_RE  = re.compile(r'\\(mat|bmat|vmat)\{([^}]*)\}')
+_MAT_ENV = {"mat": "pmatrix", "bmat": "bmatrix", "vmat": "vmatrix"}
+
 _MODE_EDIT = "edit"
 _MODE_PREVIEW = "preview"
 _MODE_SPLIT = "split"
@@ -108,8 +113,22 @@ def _extract_math(text: str) -> tuple[str, list[tuple[str, str, bool]]]:
     return text, spans
 
 
+def _expand_matrix_shorthands(content: str) -> str:
+    """Expand \mat{a,b;c,d} → \begin{pmatrix}a & b \\ c & d\end{pmatrix}."""
+    def _expand(m: re.Match) -> str:
+        env = _MAT_ENV[m.group(1)]
+        rows = m.group(2).split(";")
+        body = " \\\\ ".join(
+            " & ".join(cell.strip() for cell in row.split(","))
+            for row in rows
+        )
+        return f"\\begin{{{env}}}{body}\\end{{{env}}}"
+    return _MAT_RE.sub(_expand, content)
+
+
 def _restore_math(html: str, spans: list[tuple[str, str, bool]]) -> str:
     for ph, content, display in spans:
+        content = _expand_matrix_shorthands(content)
         html = html.replace(ph, f'$${content}$$' if display else f'${content}$')
     return html
 
