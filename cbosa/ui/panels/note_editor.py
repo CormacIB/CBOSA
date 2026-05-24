@@ -412,12 +412,16 @@ class NoteEditorPanel(BasePanel):
         self._summarize_btn   = QPushButton("Summarize")
         self._connections_btn = QPushButton("Find Connections")
         self._ask_ai_btn      = QPushButton("Ask AI")
+        self._latex_btn       = QPushButton("→ LaTeX")
         self._summarize_btn.setEnabled(False)
         self._connections_btn.setEnabled(False)
         self._ask_ai_btn.setEnabled(False)
+        self._latex_btn.setEnabled(False)
+        self._latex_btn.setToolTip("Convert selected spoken/informal text to LaTeX")
         top_bar_layout.addWidget(self._summarize_btn)
         top_bar_layout.addWidget(self._connections_btn)
         top_bar_layout.addWidget(self._ask_ai_btn)
+        top_bar_layout.addWidget(self._latex_btn)
         top_bar_layout.addStretch()
         layout.addWidget(top_bar)
 
@@ -485,6 +489,7 @@ class NoteEditorPanel(BasePanel):
         self._summarize_btn.clicked.connect(self._on_summarize)
         self._connections_btn.clicked.connect(self._on_find_connections)
         self._ask_ai_btn.clicked.connect(self._on_ask_ai)
+        self._latex_btn.clicked.connect(self._on_latex_convert)
         self._dismiss_btn.clicked.connect(self._dismiss_output)
 
         self._set_mode(_MODE_PREVIEW)
@@ -510,6 +515,7 @@ class NoteEditorPanel(BasePanel):
         self._summarize_btn.setEnabled(True)
         self._connections_btn.setEnabled(True)
         self._ask_ai_btn.setEnabled(True)
+        self._latex_btn.setEnabled(True)
         self._dismiss_output()
         self._refresh_preview()
 
@@ -621,6 +627,29 @@ class NoteEditorPanel(BasePanel):
         except NoteNotFoundError:
             return
         self.ask_ai_requested.emit(self._current_note, note.content)
+
+    def _on_latex_convert(self) -> None:
+        cursor = self._editor.textCursor()
+        selected = cursor.selectedText().strip()
+        if not selected:
+            return
+        prompt = (
+            "Convert the following spoken or informal mathematical expression to LaTeX. "
+            "Return ONLY the LaTeX notation, nothing else. "
+            "Use $...$ for inline math or $$...$$ for display math as appropriate.\n\n"
+            f"{selected}"
+        )
+        self._latex_btn.setEnabled(False)
+        worker = AIWorker(lambda: self._ai.chat([{"role": "user", "content": prompt}]))
+        worker.result_ready.connect(lambda latex: self._replace_selection(cursor, latex))
+        worker.finished.connect(lambda: self._latex_btn.setEnabled(True))
+        worker.start()
+        self._worker = worker
+
+    def _replace_selection(self, cursor: QTextCursor, latex: str) -> None:
+        latex = latex.strip()
+        if latex:
+            cursor.insertText(latex)
 
     def _on_find_connections(self) -> None:
         if self._current_note is None:
