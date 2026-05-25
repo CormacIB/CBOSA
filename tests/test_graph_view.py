@@ -2,7 +2,7 @@
 Tests for Issue #7 — Graph View Panel.
 
 Behaviors verified through public interfaces only.
-pyqtgraph PlotWidget is used for rendering; we test state, not pixels.
+QGraphicsView is used for rendering; we test state, not pixels.
 """
 from __future__ import annotations
 
@@ -47,13 +47,13 @@ def test_is_base_panel(panel):
 
 
 # ---------------------------------------------------------------------------
-# Slice 2 — has a pyqtgraph PlotWidget
+# Slice 2 — has a QGraphicsView
 # ---------------------------------------------------------------------------
 
 
-def test_has_plot_widget(panel):
-    import pyqtgraph as pg
-    assert isinstance(panel._plot, pg.PlotWidget)
+def test_has_graphics_view(panel):
+    from PyQt6.QtWidgets import QGraphicsView
+    assert isinstance(panel._view, QGraphicsView)
 
 
 # ---------------------------------------------------------------------------

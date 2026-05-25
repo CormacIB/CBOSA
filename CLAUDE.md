@@ -28,6 +28,15 @@ cbosa/
                       #   _extract_math()/_restore_math() protect delimiters from mistune
                       #   before HTML is built; KaTeX scripts placed at end of <body>.
       finance_summary_panel.py  # FinanceSummaryPanel — QPainter bar chart (category × cost)
+      graph_view.py   # GraphViewPanel — force-directed note graph (QGraphicsScene/View).
+                      #   _NodeItem: draggable QGraphicsEllipseItem; size scales with degree.
+                      #   _EdgeItem: QGraphicsLineItem that syncs endpoints each physics tick.
+                      #   _GraphScene: runs charge-repulsion + spring attraction + centre
+                      #     gravity + velocity damping via QTimer at 30 fps; auto-idles when
+                      #     settled.  Emits node_name_clicked(str).
+                      #   _GraphView: mouse-wheel zoom (AnchorUnderMouse), left-drag-empty/
+                      #     middle-drag pan, left-click-node → node_clicked signal.
+                      #   Initial layout: networkx.spring_layout scaled to scene units.
       task_panel.py   # TaskPanel — task list view
       chat_panel.py   # ChatPanel — multi-turn AI chat; Note/Vault context toggle;
                       #   note picker combobox; inline context provenance; ctx-window footer
@@ -86,7 +95,7 @@ data/
 
 ---
 
-## Issue status (as of 2026-05-23)
+## Issue status (as of 2026-05-25)
 
 GitHub repo: CormacIB/CBOSA
 
@@ -198,8 +207,8 @@ httpx                 # Canvas API + URL capture
 beautifulsoup4        # Article text extraction (Issue #11)
 yt-dlp                # YouTube capture (Issue #11)
 pypdf                 # PDF capture (Issue #11)
-networkx              # Graph layout (Issue #7)
-pyqtgraph             # Graph rendering (Issue #7)
+networkx              # Graph layout (Issue #7) — spring_layout for initial positions
+pyqtgraph             # (retained as dependency; no longer used by graph_view.py)
 pytest
 ```
 
