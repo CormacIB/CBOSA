@@ -7,6 +7,7 @@ and all n bars always fit the available space without scrolling.
 """
 from __future__ import annotations
 
+import csv
 from datetime import date, timedelta
 
 from PyQt6.QtCore import Qt
@@ -16,6 +17,7 @@ from PyQt6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
+    QFileDialog,
     QFormLayout,
     QHBoxLayout,
     QLabel,
@@ -249,6 +251,11 @@ class FinanceSummaryPanel(BasePanel):
         budget_btn.setObjectName("finance_budget_btn")
         budget_btn.clicked.connect(self._on_set_budget)
         top_row.addWidget(budget_btn)
+
+        export_btn = QPushButton("Export CSV")
+        export_btn.setObjectName("finance_export_btn")
+        export_btn.clicked.connect(self._on_export_csv)
+        top_row.addWidget(export_btn)
         root_layout.addLayout(top_row)
 
         # Custom pixel-based bar chart
@@ -336,6 +343,23 @@ class FinanceSummaryPanel(BasePanel):
         if dlg.exec() == QDialog.DialogCode.Accepted:
             config.save_finance_budget(dlg.value())
             self._refresh()
+
+    def _on_export_csv(self) -> None:
+        period = self._period_combo.currentText()
+        start, end = _date_range_for(period)
+        transactions = self._ledger.list_transactions(start_date=start, end_date=end)
+
+        default_name = f"finances_{period.lower().replace(' ', '_')}.csv"
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export Transactions", default_name, "CSV files (*.csv)"
+        )
+        if not path:
+            return
+
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=["id", "date", "amount", "description", "category"])
+            writer.writeheader()
+            writer.writerows(transactions)
 
 
 class _BudgetDialog(QDialog):
