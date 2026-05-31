@@ -9,6 +9,7 @@ from cbosa import config
 from cbosa.ai import NullAIService
 from cbosa.core.daily_note import DailyNoteService
 from cbosa.core.ledger import Ledger
+from cbosa.core.timer_store import TimerStore
 from cbosa.core.link_index import LinkIndex
 from cbosa.core.note_store import NoteStore
 from cbosa.core.search_index import SearchIndex
@@ -30,6 +31,8 @@ from cbosa.ui.panels.graph_view import GraphViewPanel
 from cbosa.ui.panels.note_browser import NoteBrowserPanel
 from cbosa.ui.panels.note_editor import NoteEditorPanel
 from cbosa.ui.panels.task_panel import TaskPanel
+from cbosa.ui.panels.timer_panel import TimerPanel
+from cbosa.ui.panels.timer_data_panel import TimerDataPanel
 
 
 def _register_panels(registry=None) -> bool:
@@ -99,6 +102,15 @@ def _register_panels(registry=None) -> bool:
     registry.register(
         "Tasks",
         lambda title, parent: TaskPanel(task_store, title, parent),
+    )
+    timer_store = TimerStore(base_data_dir / "timer.db")
+    registry.register(
+        "Timer",
+        lambda title, parent: TimerPanel(timer_store, title, parent),
+    )
+    registry.register(
+        "Time Tracker",
+        lambda title, parent: TimerDataPanel(timer_store, title, parent),
     )
     email_db_path = base_data_dir / "email.db"
     email_store = EmailStore(email_db_path)

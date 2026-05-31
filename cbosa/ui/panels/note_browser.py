@@ -3,17 +3,18 @@ NoteBrowserPanel — dockable panel showing the notes folder tree with tag filte
 """
 from __future__ import annotations
 
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
     QInputDialog,
     QLabel,
     QLineEdit,
-    QListWidget,
-    QListWidgetItem,
     QMessageBox,
     QPushButton,
+    QTreeWidget,
+    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -23,6 +24,9 @@ from cbosa.core.note_store import DuplicateNoteError, NoteStore
 from cbosa.core.search_index import SearchIndex
 from cbosa.core.tag_index import TagIndex
 from cbosa.ui.panels import BasePanel
+
+_FOLDER_FLAGS = Qt.ItemFlag.ItemIsEnabled  # visible but not selectable/editable
+_NOTE_KEY = Qt.ItemDataRole.UserRole       # stores the routing key on leaf items
 
 
 class NoteBrowserPanel(BasePanel):
@@ -67,10 +71,12 @@ class NoteBrowserPanel(BasePanel):
         filter_row.addWidget(self._tag_combo, stretch=1)
         layout.addLayout(filter_row)
 
-        self._list = QListWidget()
-        self._list.itemClicked.connect(self._on_item_clicked)
-        self._list.currentItemChanged.connect(self._on_selection_changed)
-        layout.addWidget(self._list)
+        self._tree = QTreeWidget()
+        self._tree.setHeaderHidden(True)
+        self._tree.setIndentation(14)
+        self._tree.itemClicked.connect(self._on_item_clicked)
+        self._tree.currentItemChanged.connect(self._on_selection_changed)
+        layout.addWidget(self._tree)
 
         btn_row = QHBoxLayout()
         new_btn = QPushButton("New Note")
@@ -100,30 +106,32 @@ class NoteBrowserPanel(BasePanel):
         self._tag_index.rebuild()
         self._search_index.rebuild()
         self._refresh_tag_combo()
-        self._list.clear()
-        for name in self._visible_names():
-            self._list.addItem(QListWidgetItem(name))
+        self._populate_tree()
 
     def select_note(self, name: str) -> None:
-        """Highlight *name* in the list without emitting note_selected."""
-        for i in range(self._list.count()):
-            if self._list.item(i).text() == name:
-                self._list.blockSignals(True)
-                self._list.setCurrentRow(i)
-                self._list.blockSignals(False)
-                return
+        """Highlight *name* in the tree without emitting note_selected."""
+        item = self._find_leaf(name)
+        if item is None:
+            return
+        parent = item.parent()
+        if parent is not None:
+            parent.setExpanded(True)
+        self._tree.blockSignals(True)
+        self._tree.setCurrentItem(item)
+        self._tree.blockSignals(False)
+        self._tree.scrollToItem(item)
 
     def set_tag_filter(self, tag: str) -> None:
         self._tag_filter = tag or None
-        self.refresh()
+        self._populate_tree()
 
     def clear_tag_filter(self) -> None:
         self._tag_filter = None
-        self.refresh()
+        self._populate_tree()
 
     def set_search_query(self, query: str) -> None:
         self._search_query = query.strip()
-        self.refresh()
+        self._populate_tree()
 
     def create_note(self, name: str) -> None:
         self._store.create(name, "")
@@ -136,10 +144,7 @@ class NoteBrowserPanel(BasePanel):
         self.note_deleted.emit(name)
 
     def rename_note(self, old_name: str, new_name: str) -> None:
-        """Rename a note and propagate [[old_name]] wikilinks to [[new_name]].
-
-        Raises DuplicateNoteError if new_name already exists.
-        """
+        """Rename a note and propagate [[old_name]] wikilinks to [[new_name]]."""
         self._store.rename(old_name, new_name)
         if self._link_index is not None:
             self._link_index.rename_note(old_name, new_name)
@@ -147,10 +152,46 @@ class NoteBrowserPanel(BasePanel):
         self.note_renamed.emit(old_name, new_name)
 
     # ------------------------------------------------------------------
-    # Private
+    # Private — tree population
     # ------------------------------------------------------------------
 
-    def _visible_names(self) -> list[str]:
+    def _populate_tree(self) -> None:
+        self._tree.clear()
+        if self._search_query or self._tag_filter:
+            self._populate_filtered()
+        else:
+            self._populate_browse()
+
+    def _populate_browse(self) -> None:
+        """Three collapsible folders: Notes / Daily / Archived."""
+        all_names = set(self._store.all_names())
+        archived = set(self._tag_index.notes_for_tag("archived")) & all_names
+        regular = sorted(all_names - archived)
+
+        notes_folder = self._make_folder(f"Notes ({len(regular)})")
+        for name in regular:
+            self._add_leaf(notes_folder, name, name)
+        self._tree.addTopLevelItem(notes_folder)
+        notes_folder.setExpanded(True)
+
+        if self._daily_store is not None:
+            daily_names = sorted(self._daily_store.all_names(), reverse=True)
+            daily_folder = self._make_folder(f"Daily ({len(daily_names)})")
+            for name in daily_names:
+                self._add_leaf(daily_folder, name, f"daily/{name}")
+            self._tree.addTopLevelItem(daily_folder)
+            daily_folder.setExpanded(False)
+
+        if archived:
+            arch_names = sorted(archived)
+            arch_folder = self._make_folder(f"Archived ({len(arch_names)})")
+            for name in arch_names:
+                self._add_leaf(arch_folder, name, name)
+            self._tree.addTopLevelItem(arch_folder)
+            arch_folder.setExpanded(False)
+
+    def _populate_filtered(self) -> None:
+        """Flat results list when a search or tag filter is active."""
         if self._search_query:
             search_hits: set[str] | None = set(self._search_index.search(self._search_query))
         else:
@@ -170,15 +211,41 @@ class NoteBrowserPanel(BasePanel):
         else:
             names = set(self._store.all_names())
 
-        result = sorted(names)
+        sorted_names = sorted(names)
+        results_folder = self._make_folder(f"Results ({len(sorted_names)})")
+        for name in sorted_names:
+            self._add_leaf(results_folder, name, name)
+        self._tree.addTopLevelItem(results_folder)
+        results_folder.setExpanded(True)
 
-        if self._daily_store is not None and not self._search_query and not self._tag_filter:
-            daily = sorted(
-                f"daily/{n}" for n in self._daily_store.all_names()
-            )
-            result = result + daily
+    @staticmethod
+    def _make_folder(label: str) -> QTreeWidgetItem:
+        item = QTreeWidgetItem([label])
+        item.setFlags(_FOLDER_FLAGS)
+        font = item.font(0)
+        font.setWeight(QFont.Weight.Bold)
+        item.setFont(0, font)
+        return item
 
-        return result
+    @staticmethod
+    def _add_leaf(parent: QTreeWidgetItem, display: str, key: str) -> QTreeWidgetItem:
+        leaf = QTreeWidgetItem([display])
+        leaf.setData(0, _NOTE_KEY, key)
+        parent.addChild(leaf)
+        return leaf
+
+    def _find_leaf(self, key: str) -> QTreeWidgetItem | None:
+        for i in range(self._tree.topLevelItemCount()):
+            folder = self._tree.topLevelItem(i)
+            for j in range(folder.childCount()):
+                leaf = folder.child(j)
+                if leaf.data(0, _NOTE_KEY) == key:
+                    return leaf
+        return None
+
+    # ------------------------------------------------------------------
+    # Private — signals and slots
+    # ------------------------------------------------------------------
 
     def _refresh_tag_combo(self) -> None:
         current = self._tag_combo.currentText()
@@ -197,13 +264,16 @@ class NoteBrowserPanel(BasePanel):
     def _on_tag_changed(self, tag: str) -> None:
         self.set_tag_filter(tag)
 
-    def _on_item_clicked(self, item: QListWidgetItem) -> None:
-        self.note_selected.emit(item.text())
+    def _on_item_clicked(self, item: QTreeWidgetItem, _column: int) -> None:
+        key = item.data(0, _NOTE_KEY)
+        if key:  # None on folder headers
+            self.note_selected.emit(key)
 
-    def _on_selection_changed(self, current, _previous) -> None:
-        enabled = current is not None
-        self._delete_btn.setEnabled(enabled)
-        self._rename_btn.setEnabled(enabled)
+    def _on_selection_changed(self, current: QTreeWidgetItem | None, _previous) -> None:
+        key = current.data(0, _NOTE_KEY) if current is not None else None
+        is_editable_note = bool(key and not key.startswith("daily/"))
+        self._delete_btn.setEnabled(is_editable_note)
+        self._rename_btn.setEnabled(is_editable_note)
 
     def _prompt_create_note(self) -> None:
         name, ok = QInputDialog.getText(self, "New Note", "Note name:")
@@ -211,10 +281,12 @@ class NoteBrowserPanel(BasePanel):
             self.create_note(name.strip())
 
     def _prompt_rename_note(self) -> None:
-        item = self._list.currentItem()
+        item = self._tree.currentItem()
         if item is None:
             return
-        old_name = item.text()
+        old_name = item.data(0, _NOTE_KEY)
+        if not old_name or old_name.startswith("daily/"):
+            return
         new_name, ok = QInputDialog.getText(
             self, "Rename Note", "New name:", text=old_name
         )
@@ -230,15 +302,17 @@ class NoteBrowserPanel(BasePanel):
             )
 
     def _delete_selected_note(self) -> None:
-        item = self._list.currentItem()
+        item = self._tree.currentItem()
         if item is None:
             return
-        name = item.text()
+        key = item.data(0, _NOTE_KEY)
+        if not key or key.startswith("daily/"):
+            return
         reply = QMessageBox.question(
             self,
             "Delete Note",
-            f"Delete '{name}'? This cannot be undone.",
+            f"Delete '{key}'? This cannot be undone.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply == QMessageBox.StandardButton.Yes:
-            self.delete_note(name)
+            self.delete_note(key)
