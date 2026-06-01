@@ -77,16 +77,23 @@ class BannerWidget(QWidget):
         self._clock_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self._tick()
 
-        layout.addWidget(self._meta_label, stretch=1)
-        layout.addWidget(art_label, stretch=0)
+        # Right section mirrors left's stretch=1 so art stays centered
+        right = QWidget()
+        right_lay = QHBoxLayout(right)
+        right_lay.setContentsMargins(0, 0, 0, 0)
+        right_lay.setSpacing(0)
+        right_lay.addStretch()
 
-        # Pomodoro mini widget — only if timer_store provided
         self._pomo_widget = None
         if self._timer_store is not None:
             self._pomo_widget = self._build_pomodoro()
-            layout.addWidget(self._pomo_widget, stretch=0)
+            right_lay.addWidget(self._pomo_widget)
 
-        layout.addWidget(self._clock_label, stretch=0)
+        right_lay.addWidget(self._clock_label)
+
+        layout.addWidget(self._meta_label, stretch=1)
+        layout.addWidget(art_label, stretch=0)
+        layout.addWidget(right, stretch=1)
 
     def _build_pomodoro(self):
         from cbosa import config
