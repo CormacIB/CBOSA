@@ -40,6 +40,7 @@ class MainWindow(QMainWindow):
         registry: PanelRegistry | None = None,
         layout_path: Path | str | None = None,
         ai_available: bool = True,
+        timer_store=None,
     ) -> None:
         super().__init__()
         self._registry = registry or default_registry
@@ -57,7 +58,7 @@ class MainWindow(QMainWindow):
         container_layout.setContentsMargins(0, 0, 0, 0)
         container_layout.setSpacing(0)
 
-        self._banner = BannerWidget(container)
+        self._banner = BannerWidget(container, timer_store=timer_store)
         container_layout.addWidget(self._banner)
 
         self._dock_manager = CDockManager(container)

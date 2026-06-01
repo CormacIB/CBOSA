@@ -31,11 +31,10 @@ from cbosa.ui.panels.graph_view import GraphViewPanel
 from cbosa.ui.panels.note_browser import NoteBrowserPanel
 from cbosa.ui.panels.note_editor import NoteEditorPanel
 from cbosa.ui.panels.task_panel import TaskPanel
-from cbosa.ui.panels.timer_panel import TimerPanel
 from cbosa.ui.panels.timer_data_panel import TimerDataPanel
 
 
-def _register_panels(registry=None) -> bool:
+def _register_panels(registry=None, timer_store: TimerStore | None = None) -> bool:
     """Register all panels and return True if AI backend is reachable."""
     if registry is None:
         registry = default_registry
@@ -103,11 +102,8 @@ def _register_panels(registry=None) -> bool:
         "Tasks",
         lambda title, parent: TaskPanel(task_store, title, parent),
     )
-    timer_store = TimerStore(base_data_dir / "timer.db")
-    registry.register(
-        "Timer",
-        lambda title, parent: TimerPanel(timer_store, title, parent),
-    )
+    if timer_store is None:
+        timer_store = TimerStore(base_data_dir / "timer.db")
     registry.register(
         "Time Tracker",
         lambda title, parent: TimerDataPanel(timer_store, title, parent),
@@ -163,7 +159,9 @@ def _apply_theme(app: QApplication) -> None:
 def run() -> int:
     """Entry point — create app, show window, start event loop."""
     app = create_app()
-    ai_available = _register_panels()
-    window = MainWindow(ai_available=ai_available)
+    base_data_dir = config.resolve("data_dir", "data")
+    timer_store = TimerStore(base_data_dir / "timer.db")
+    ai_available = _register_panels(timer_store=timer_store)
+    window = MainWindow(ai_available=ai_available, timer_store=timer_store)
     window.show()
     return app.exec()

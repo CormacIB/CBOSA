@@ -1,8 +1,8 @@
 """
-BannerWidget — fixed top bar with pixel art logo and system info.
+BannerWidget — fixed top bar with pixel art logo, Pomodoro timer, and clock.
 
 Layout:
-  [ username · theme ]     [ pixel art / ASCII art ]     [ Thu 2026-05-15  14:32:07 ]
+  [ username · theme ]     [ pixel art / ASCII art ]     [ pomo ring MM:SS ]  [ clock ]
 """
 from __future__ import annotations
 
@@ -34,11 +34,12 @@ def _theme_short_name(rel_path: str) -> str:
 
 
 class BannerWidget(QWidget):
-    """Horizontal banner: left meta | center ASCII art | right clock."""
+    """Horizontal banner: left meta | center ASCII art | right Pomodoro + clock."""
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, parent=None, timer_store=None) -> None:
         super().__init__(parent)
         self.setObjectName("banner_widget")
+        self._timer_store = timer_store
         self._build_ui()
         self._start_clock()
 
@@ -78,7 +79,21 @@ class BannerWidget(QWidget):
 
         layout.addWidget(self._meta_label, stretch=1)
         layout.addWidget(art_label, stretch=0)
-        layout.addWidget(self._clock_label, stretch=1)
+
+        # Pomodoro mini widget — only if timer_store provided
+        self._pomo_widget = None
+        if self._timer_store is not None:
+            self._pomo_widget = self._build_pomodoro()
+            layout.addWidget(self._pomo_widget, stretch=0)
+
+        layout.addWidget(self._clock_label, stretch=0)
+
+    def _build_pomodoro(self):
+        from cbosa import config
+        from cbosa.ui.pomodoro import PomodoroEngine, PomodoroMiniWidget
+        state_path = config.resolve("data_dir", "data") / "pomodoro_state.json"
+        engine = PomodoroEngine(self._timer_store, state_path, parent=self)
+        return PomodoroMiniWidget(engine, parent=self)
 
     def _start_clock(self) -> None:
         timer = QTimer(self)
@@ -96,3 +111,5 @@ class BannerWidget(QWidget):
         except OSError:
             username = os.environ.get("USERNAME", os.environ.get("USER", "user"))
         self._meta_label.setText(f"{username}  ·  {_theme_short_name(rel_path)}")
+        if self._pomo_widget is not None:
+            self._pomo_widget.update_colors()
