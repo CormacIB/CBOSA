@@ -46,6 +46,7 @@ class NoteStore:
 
     def create(self, name: str, content: str, frontmatter: dict | None = None) -> Note:
         path = self._path(name)
+        path.parent.mkdir(parents=True, exist_ok=True)
         fm = frontmatter or {}
         path.write_text(self._serialize(content, fm), encoding="utf-8")
         return Note(name=name, content=content, frontmatter=fm)
@@ -83,7 +84,51 @@ class NoteStore:
         return self.read(new_name)
 
     def all_names(self) -> list[str]:
-        return [p.stem for p in self._root.glob("*.md")]
+        return [
+            str(p.relative_to(self._root).with_suffix(""))
+            for p in sorted(self._root.rglob("*.md"))
+        ]
+
+    def create_folder(self, rel_path: str) -> Path:
+        folder = self._root / rel_path
+        folder.mkdir(parents=True, exist_ok=True)
+        return folder
+
+    def all_folders(self) -> list[str]:
+        """Return all subdirectory paths relative to root; '' represents the root."""
+        folders: list[str] = [""]
+        for p in sorted(self._root.rglob("*")):
+            if p.is_dir():
+                folders.append(str(p.relative_to(self._root)))
+        return folders
+
+    def move_note(self, name: str, new_folder: str) -> str:
+        """Move note to new_folder. Returns the new full name (relative path)."""
+        old_path = self._path(name)
+        stem = Path(name).name
+        new_name = f"{new_folder}/{stem}" if new_folder else stem
+        new_path = self._path(new_name)
+        if not old_path.exists():
+            raise NoteNotFoundError(f"Note not found: {name}")
+        if new_path.exists():
+            raise DuplicateNoteError(f"Note already exists: {new_name}")
+        new_path.parent.mkdir(parents=True, exist_ok=True)
+        old_path.rename(new_path)
+        return new_name
+
+    def resolve_name(self, bare_name: str) -> str:
+        """Find a note by its bare stem, ignoring folder. Returns full name.
+
+        Raises NoteNotFoundError if nothing matches. If multiple notes share
+        the stem, returns the shallowest / alphabetically first.
+        """
+        matches = [
+            n for n in self.all_names() if Path(n).name == bare_name
+        ]
+        if not matches:
+            raise NoteNotFoundError(f"Note not found: {bare_name}")
+        matches.sort(key=lambda n: (n.count("/"), n))
+        return matches[0]
 
     # ------------------------------------------------------------------
     # Private helpers

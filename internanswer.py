@@ -1,14 +1,11 @@
 
 binary_dataset = [
-[1,2],[3,4],[5,6],7,8,9,10,11
+[x,y,z],[x,y,z],[5,6],7,8,9,10,11
  ]
 
 
-## CORMAC 😈
-def generate_reduced_dataset_simple(example_dataset, zoom):
-    example_dataset = example_dataset[0::zoom+1]
-    return example_dataset
-print(generate_reduced_dataset_simple(binary_dataset,0))
+
+
 ''''
 ##CLAUDE
 def filter_point_cloud(data, z):
@@ -109,3 +106,8 @@ print(scale_map_points(example_dataset, 1))
 '''
 
 
+## CORMAC 😈
+def generate_reduced_dataset_simple(example_dataset, zoom):
+    example_dataset = example_dataset[0::zoom+1]
+    return example_dataset
+print(generate_reduced_dataset_simple(binary_dataset,0))

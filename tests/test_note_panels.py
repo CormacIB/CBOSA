@@ -13,9 +13,32 @@ from cbosa.core.note_store import NoteStore, DuplicateNoteError
 from cbosa.core.search_index import SearchIndex
 from cbosa.core.tag_index import TagIndex
 from cbosa.ai.service import NullAIService
+from PyQt6.QtCore import Qt
 from cbosa.ui.panels import BasePanel
-from cbosa.ui.panels.note_browser import NoteBrowserPanel
+from cbosa.ui.panels.note_browser import NoteBrowserPanel, _NOTE_KEY
 from cbosa.ui.panels.note_editor import NoteEditorPanel, _render_markdown
+
+
+def _tree_leaf_keys(panel: NoteBrowserPanel) -> list[str]:
+    """Collect all note keys (UserRole data) from leaf items in the browser tree."""
+    keys: list[str] = []
+
+    def _walk(item):
+        key = item.data(0, _NOTE_KEY)
+        if key:
+            keys.append(key)
+        for i in range(item.childCount()):
+            _walk(item.child(i))
+
+    for i in range(panel._tree.topLevelItemCount()):
+        _walk(panel._tree.topLevelItem(i))
+    return keys
+
+
+def _tree_display_names(panel: NoteBrowserPanel) -> list[str]:
+    """Collect the display text of all leaf items (note name only, no folder)."""
+    from pathlib import Path
+    return [Path(k).name for k in _tree_leaf_keys(panel)]
 
 
 # ---------------------------------------------------------------------------
@@ -57,7 +80,7 @@ class TestNoteBrowserPanel:
         store.create("alpha", "content a")
         store.create("beta", "content b")
         panel = NoteBrowserPanel(store, tag_index, search_index)
-        items = [panel._list.item(i).text() for i in range(panel._list.count())]
+        items = _tree_display_names(panel)
         assert "alpha" in items
         assert "beta" in items
 
@@ -69,7 +92,7 @@ class TestNoteBrowserPanel:
         tag_index.rebuild()
         panel = NoteBrowserPanel(store, tag_index, search_index)
         panel.set_tag_filter("python")
-        items = [panel._list.item(i).text() for i in range(panel._list.count())]
+        items = _tree_display_names(panel)
         assert "python-note" in items
         assert "other-note" not in items
 
@@ -80,7 +103,7 @@ class TestNoteBrowserPanel:
         panel = NoteBrowserPanel(store, tag_index, search_index)
         panel.set_tag_filter("python")
         panel.clear_tag_filter()
-        items = [panel._list.item(i).text() for i in range(panel._list.count())]
+        items = _tree_display_names(panel)
         assert len(items) == 2
 
     # --- slice 3: note_selected signal ---
@@ -90,7 +113,9 @@ class TestNoteBrowserPanel:
         panel = NoteBrowserPanel(store, tag_index, search_index)
         received = []
         panel.note_selected.connect(received.append)
-        panel._on_item_clicked(panel._list.item(0))
+        leaf = panel._find_leaf("my-note")
+        assert leaf is not None
+        panel._on_item_clicked(leaf, 0)
         assert received == ["my-note"]
 
     # --- slice 4: create new note ---
@@ -110,7 +135,7 @@ class TestNoteBrowserPanel:
     def test_create_note_refreshes_list(self, qapp, store, tag_index, search_index):
         panel = NoteBrowserPanel(store, tag_index, search_index)
         panel.create_note("brand-new")
-        items = [panel._list.item(i).text() for i in range(panel._list.count())]
+        items = _tree_display_names(panel)
         assert "brand-new" in items
 
     # --- slice FTS: full-text search ---
@@ -120,7 +145,7 @@ class TestNoteBrowserPanel:
         store.create("beta", "classical music theory")
         panel = NoteBrowserPanel(store, tag_index, search_index)
         panel.set_search_query("quantum")
-        items = [panel._list.item(i).text() for i in range(panel._list.count())]
+        items = _tree_display_names(panel)
         assert "alpha" in items
         assert "beta" not in items
 
@@ -130,7 +155,7 @@ class TestNoteBrowserPanel:
         panel = NoteBrowserPanel(store, tag_index, search_index)
         panel.set_search_query("quantum")
         panel.set_search_query("")
-        items = [panel._list.item(i).text() for i in range(panel._list.count())]
+        items = _tree_display_names(panel)
         assert len(items) == 2
 
     # --- delete slice ---
@@ -153,7 +178,7 @@ class TestNoteBrowserPanel:
         store.create("to-delete", "content")
         panel = NoteBrowserPanel(store, tag_index, search_index)
         panel.delete_note("to-delete")
-        items = [panel._list.item(i).text() for i in range(panel._list.count())]
+        items = _tree_display_names(panel)
         assert "to-delete" not in items
 
     def test_search_and_tag_filter_intersect(self, qapp, store, tag_index, search_index):
@@ -163,7 +188,7 @@ class TestNoteBrowserPanel:
         panel = NoteBrowserPanel(store, tag_index, search_index)
         panel.set_tag_filter("python")
         panel.set_search_query("quantum")
-        items = [panel._list.item(i).text() for i in range(panel._list.count())]
+        items = _tree_display_names(panel)
         assert items == ["match-both"]
 
 
@@ -284,26 +309,26 @@ class TestNoteBrowserPanelDailyNotes:
     def test_browser_shows_daily_notes_with_prefix(
         self, qapp, notes_store, daily_store, tmp_path
     ):
-        """A daily note in daily_store appears in the list as 'daily/YYYY-MM-DD'."""
+        """A daily note in daily_store appears in the tree as 'daily/YYYY-MM-DD'."""
         daily_store.create("2026-05-11", "")
         tag_index = TagIndex(notes_store)
         search_index = SearchIndex(notes_store)
         panel = NoteBrowserPanel(
             notes_store, tag_index, search_index, daily_store=daily_store
         )
-        items = [panel._list.item(i).text() for i in range(panel._list.count())]
-        assert "daily/2026-05-11" in items
+        keys = _tree_leaf_keys(panel)
+        assert "daily/2026-05-11" in keys
 
     def test_browser_without_daily_store_shows_no_prefix(
         self, qapp, notes_store, tmp_path
     ):
-        """Without a daily_store, no 'daily/' items appear in the list."""
+        """Without a daily_store, no 'daily/' items appear in the tree."""
         notes_store.create("regular-note", "content")
         tag_index = TagIndex(notes_store)
         search_index = SearchIndex(notes_store)
         panel = NoteBrowserPanel(notes_store, tag_index, search_index)
-        items = [panel._list.item(i).text() for i in range(panel._list.count())]
-        assert not any(item.startswith("daily/") for item in items)
+        keys = _tree_leaf_keys(panel)
+        assert not any(k.startswith("daily/") for k in keys)
 
     def test_browser_daily_note_selected_signal(
         self, qapp, notes_store, daily_store, tmp_path
@@ -317,13 +342,9 @@ class TestNoteBrowserPanelDailyNotes:
         )
         received = []
         panel.note_selected.connect(received.append)
-        daily_items = [
-            panel._list.item(i)
-            for i in range(panel._list.count())
-            if panel._list.item(i).text() == "daily/2026-05-11"
-        ]
-        assert daily_items, "daily/2026-05-11 not found in list"
-        panel._on_item_clicked(daily_items[0])
+        leaf = panel._find_leaf("daily/2026-05-11")
+        assert leaf is not None, "daily/2026-05-11 not found in tree"
+        panel._on_item_clicked(leaf, 0)
         assert received == ["daily/2026-05-11"]
 
 
@@ -485,11 +506,11 @@ class TestNoteBrowserPanelRename:
         assert "alpha" not in store.all_names()
 
     def test_rename_note_refreshes_list(self, panel, store):
-        """After rename, the list widget shows new name and not old name."""
+        """After rename, the tree shows new name and not old name."""
         store.create("alpha", "content")
         panel.rename_note("alpha", "beta")
         panel.refresh()
-        items = [panel._list.item(i).text() for i in range(panel._list.count())]
+        items = _tree_display_names(panel)
         assert "beta" in items
         assert "alpha" not in items
 

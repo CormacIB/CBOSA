@@ -569,6 +569,18 @@ class NoteEditorPanel(BasePanel):
     def _resolve(self, name: str) -> tuple[NoteStore, str]:
         if name.startswith("daily/") and self._daily_store is not None:
             return self._daily_store, name[len("daily/"):]
+        # If the name has no "/" and no matching file, try bare-name resolution
+        # (wikilinks emit bare names; the note may live in a subdirectory)
+        from pathlib import Path as _Path
+        from cbosa.core.note_store import NoteNotFoundError as _NNF
+        if "/" not in name:
+            path = self._store._root / f"{name}.md"
+            if not path.exists():
+                try:
+                    full = self._store.resolve_name(name)
+                    return self._store, full
+                except _NNF:
+                    pass
         return self._store, name
 
     def _set_mode(self, mode: str) -> None:
