@@ -530,7 +530,7 @@ class NoteEditorPanel(BasePanel):
         if self._current_note == name:
             self._current_note = None
             self._editor.clear()
-            self._preview.clear()
+            self._preview.setHtml("")
 
     def update_theme(self, theme_path: str) -> None:
         """Called by MainWindow when the user switches themes."""
