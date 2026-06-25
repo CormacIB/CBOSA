@@ -16,22 +16,20 @@ from cbosa.core.search_index import SearchIndex
 from cbosa.core.tag_index import TagIndex
 from cbosa.ui.theme_engine import ThemeEngine, ThemeLoadError
 from cbosa.ui.main_window import MainWindow
-from cbosa.modules.canvas_store import CanvasStore
 from cbosa.modules.capture_engine import CaptureEngine
-from cbosa.modules.email_store import EmailStore
 from cbosa.core.task_store import TaskStore
 from cbosa.ui.panels import default_registry
-from cbosa.ui.panels.canvas_panel import CanvasPanel
 from cbosa.ui.panels.chat_panel import ChatPanel
 from cbosa.ui.panels.capture_panel import CapturePanel
-from cbosa.ui.panels.email_panel import EmailPanel
 from cbosa.ui.panels.finance_panel import FinancePanel
-from cbosa.ui.panels.finance_summary_panel import FinanceSummaryPanel
 from cbosa.ui.panels.graph_view import GraphViewPanel
 from cbosa.ui.panels.note_browser import NoteBrowserPanel
 from cbosa.ui.panels.note_editor import NoteEditorPanel
 from cbosa.ui.panels.task_panel import TaskPanel
 from cbosa.ui.panels.timer_data_panel import TimerDataPanel
+from cbosa.ui.hotkey_service import GlobalHotkeyService
+from cbosa.ui.quick_capture import QuickCaptureWindow
+from cbosa.ui.tray import TrayService
 
 
 def _register_panels(registry=None, timer_store: TimerStore | None = None) -> bool:
@@ -93,10 +91,6 @@ def _register_panels(registry=None, timer_store: TimerStore | None = None) -> bo
         "Finance",
         lambda title, parent: FinancePanel(ledger, title, parent, ai_service=ai_service),
     )
-    registry.register(
-        "Finance Summary",
-        lambda title, parent: FinanceSummaryPanel(ledger, title, parent),
-    )
     task_store = TaskStore(base_data_dir / "tasks.db")
     registry.register(
         "Tasks",
@@ -107,18 +101,6 @@ def _register_panels(registry=None, timer_store: TimerStore | None = None) -> bo
     registry.register(
         "Time Tracker",
         lambda title, parent: TimerDataPanel(timer_store, title, parent),
-    )
-    email_db_path = base_data_dir / "email.db"
-    email_store = EmailStore(email_db_path)
-    registry.register(
-        "Email",
-        lambda title, parent: EmailPanel(email_store, title, parent, ai_service=ai_service),
-    )
-    canvas_db_path = base_data_dir / "canvas.db"
-    canvas_store = CanvasStore(canvas_db_path)
-    registry.register(
-        "Canvas",
-        lambda title, parent: CanvasPanel(canvas_store, title, parent),
     )
     capture_engine = CaptureEngine(ai_service=ai_service)
     registry.register(
@@ -142,6 +124,7 @@ def create_app(argv=None) -> QApplication:
     app = QApplication(argv)
     app.setApplicationName("CBOSA")
     app.setOrganizationName("CBOSA")
+    app.setQuitOnLastWindowClosed(False)
     _apply_theme(app)
     return app
 
@@ -164,4 +147,16 @@ def run() -> int:
     ai_available = _register_panels(timer_store=timer_store)
     window = MainWindow(ai_available=ai_available, timer_store=timer_store)
     window.show()
-    return app.exec()
+
+    capture_window = QuickCaptureWindow(base_data_dir / "notes")
+
+    tray = TrayService(window, capture_window, parent=app)
+    tray.show()
+
+    hotkey_service = GlobalHotkeyService(parent=app)
+    hotkey_service.triggered.connect(capture_window.show)
+    hotkey_service.start()
+
+    exit_code = app.exec()
+    hotkey_service.stop()
+    return exit_code

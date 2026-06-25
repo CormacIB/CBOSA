@@ -10,4 +10,5 @@ yt-dlp
 pypdf
 networkx
 pyqtgraph
+pynput
 pytest
