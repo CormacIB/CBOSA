@@ -1,0 +1,25 @@
+{
+  "name": "cbosa",
+  "version": "0.1.0",
+  "description": "CBOSA — Personal OS",
+  "main": "electron.cjs",
+  "scripts": {
+    "predev": "node -e \"try{require('child_process').execSync('lsof -ti:5173 | xargs kill -9',{stdio:'ignore',shell:true})}catch(e){}\"",
+    "dev": "concurrently -k \"vite\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
+    "build": "vite build",
+    "start": "electron .",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.0",
+    "concurrently": "^9.0.0",
+    "cross-env": "^7.0.3",
+    "electron": "^31.3.0",
+    "vite": "^5.4.0",
+    "wait-on": "^8.0.0"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  }
+}

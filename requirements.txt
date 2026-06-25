@@ -12,3 +12,7 @@ networkx
 pyqtgraph
 pynput
 pytest
+# Electron backend server
+fastapi>=0.111
+uvicorn[standard]>=0.29
+pydantic>=2.0
